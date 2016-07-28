@@ -99,6 +99,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
+    procedure Init(ExePath: string);
     function AddClass(cType: TClass): TJSClass;
     function AddGlobal(global: TObject): TJSClass;
     procedure RegisterHelper(CType: TClass; HelperObject: TJSClassExtender);
@@ -760,6 +761,14 @@ begin
   Result := FSystem;
 end;
 
+procedure TJSEngine.Init(ExePath: string);
+var
+  PAnsiPath: PAnsiChar;
+begin
+  PAnsiPath := PAnsiChar(AnsiString(ExePath));
+  FEngine.InitNode(PAnsiPath);
+end;
+
 function TJSEngine.RunFile(code, appPath: string): string;
 var
   AnsiStr: AnsiString;
@@ -886,6 +895,8 @@ end;
 procedure TJSEngine.SetDebug(const Value: boolean);
 begin
   FDebug := Value;
+  if Assigned(FEngine) then  
+    FEngine.SetDebug(Value);
 end;
 
 procedure TJSEngine.SetFilename(const Value: string);

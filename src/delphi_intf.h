@@ -281,6 +281,7 @@ public:
 	std::vector<char> ReadCode(char * code);
 	bool report_exceptions = true;
 	bool print_result = true;
+	bool node_initialized;
 
 	void AddMethod(std::string methodName);;
 	v8::Isolate * GetIsolate();
@@ -288,6 +289,7 @@ public:
 
 	v8::Local<v8::FunctionTemplate> AddV8ObjectTemplate(IObjectTemplate * obj);
 
+	virtual void APIENTRY InitNode(char * execPath);
 	virtual IObjectTemplate * APIENTRY AddGlobal(void * dClass, void * object);
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);

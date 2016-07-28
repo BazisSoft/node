@@ -189,12 +189,9 @@ NODE_EXTERN extern bool force_fips_crypto;
 
 NODE_EXTERN int Start(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
 ///
-NODE_EXTERN void InitIalize(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
-NODE_EXTERN void RunScript(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
+NODE_EXTERN void InitIalize(int argc, char *argv[], std::function<void(int)> func);
+NODE_EXTERN int RunScript(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
 NODE_EXTERN void Dispose();
-
-int exec_argc_ = 0;
-const char** exec_argv_ = nullptr;
 ///
 NODE_EXTERN void Init(int* argc,
                       const char** argv,

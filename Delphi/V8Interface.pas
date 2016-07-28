@@ -140,6 +140,7 @@ type
   end;
 
   IEngine = class(IEngineIntf)
+    procedure InitNode(ExecPath: PAnsiChar); virtual; stdcall; abstract;
     function AddGlobal(dClass: Pointer; dObject: TObject): IObjectTemplate; virtual; stdcall; abstract;
     function AddObject(classtype: PAnsiChar; dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function GetObject(dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;

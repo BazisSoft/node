@@ -123,12 +123,13 @@ begin
     Math.SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
       exUnderflow, exPrecision]);
     Eng := TJSEngine.Create;
+    Eng.Init(ParamStr(0));
+    Eng.Debug := True;
     Global := TGlobalNamespace.Create(Eng);
     try
       Eng.AddGlobal(Global);
       ///
-      Eng.Debug := True;
-      Eng.RunFile('Test.js', ParamStr(0));
+      Eng.RunFile('test.js', ParamStr(0));
       // <<----send log to user-----
       if Eng.Log.Count > 0 then
       begin

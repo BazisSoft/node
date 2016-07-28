@@ -105,18 +105,20 @@ std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& ar
 		args.push_back(arg2);
 		argc += 2;
 	}
-	if (isFileName) {
-		arg1 = codeParam;
-		args.push_back(arg1);
-		argc++;
-	}
-	else {
-		arg0 = "-e";
-		args.push_back(arg0);
-		argc++;
-		arg1 = codeParam;
-		args.push_back(arg1);
-		argc ++;
+	if (codeParam) {
+		if (isFileName) {
+			arg1 = codeParam;
+			args.push_back(arg1);
+			argc++;
+		}
+		else {
+			arg0 = "-e";
+			args.push_back(arg0);
+			argc++;
+			arg1 = codeParam;
+			args.push_back(arg1);
+			argc++;
+		}
 	}
 	//char* argv[] = {&filename[0], &arg0[0], &arg1[0], &arg2[0], NULL };
 	//return argv;
@@ -148,6 +150,17 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 	V8Object->PrototypeTemplate()->SetInternalFieldCount(obj->FieldCount);
 	obj->objTempl.Reset(isolate, V8Object);
 	return V8Object;
+}
+
+void IEngine::InitNode(char * execPath)
+{
+	if (!node_initialized) {
+		int argc = 0;
+		name = execPath;
+		auto argv = MakeArgs("", false, argc);
+		node::InitIalize(argc, argv.data(), [this](int code) {this->SetErrorCode(code); });
+		node_initialized = true;
+	}
 }
 
 IObjectTemplate * IEngine::AddGlobal(void * dClass, void * object)
@@ -197,7 +210,8 @@ char * IEngine::RunFile(char * fName, char * exeName)
 	int argc = 0;
 	name = exeName;
 	auto argv = MakeArgs(fName, true, argc);
-	node::Start(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	//node::Start(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	return nullptr;
 }
 
@@ -367,6 +381,7 @@ IEngine::IEngine(void * DEngine)
 	//v8::HandleScope scoope(isolate);
 	//isolate->SetData(EngineSlot, this);
 	this->DEngine = DEngine;
+	node_initialized = false;
 }
 
 IEngine::IEngine(int argc, char * argv[])
@@ -388,6 +403,8 @@ IEngine::IEngine(int argc, char * argv[])
 
 IEngine::~IEngine()
 {
+	if (node_initialized)
+		node::Dispose();
 	/*isolate->Dispose();
 	v8::V8::Dispose();
 	v8::V8::ShutdownPlatform();*/

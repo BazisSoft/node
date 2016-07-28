@@ -4506,8 +4506,12 @@ int Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
 
   return exit_code;
 }
+/// node rerun methods
 
-void InitIalize(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr) {
+int exec_argc_ = 0;
+const char** exec_argv_ = nullptr;
+
+void InitIalize(int argc, char *argv[], std::function<void(int)> func) {
 	exit = func;
 	PlatformInit();
 
@@ -4534,6 +4538,27 @@ void InitIalize(int argc, char *argv[], std::function<void(int)> func, void *eng
 	v8_platform.Initialize(v8_thread_pool_size);
 	V8::Initialize();
 
+}
+
+NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func, void * eng)
+{
+	int exit_code = 1;
+
+	int v8_argc;
+	const char** v8_argv;
+	ParseArgs(&argc, const_cast<const char**>(argv), &exec_argc_, &exec_argv_, &v8_argc, &v8_argv);
+	{
+		NodeInstanceData instance_data(NodeInstanceType::MAIN,
+			uv_default_loop(),
+			argc,
+			const_cast<const char**>(argv),
+			exec_argc_,
+			exec_argv_,
+			use_debug_agent);
+		StartNodeInstance(&instance_data, eng);
+		exit_code = instance_data.exit_code();
+	}
+	return exit_code;
 }
 
 void Dispose()
