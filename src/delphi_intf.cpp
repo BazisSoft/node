@@ -105,7 +105,7 @@ std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& ar
 		args.push_back(arg2);
 		argc += 2;
 	}
-	if (codeParam) {
+	if (codeParam != "") {
 		if (isFileName) {
 			arg1 = codeParam;
 			args.push_back(arg1);
@@ -127,6 +127,9 @@ std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& ar
 
 v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * obj)
 {
+	if (!obj->objTempl.IsEmpty())
+		return obj->objTempl.Get(isolate);
+	obj->objTempl.Empty();
 	obj->FieldCount = ObjectInternalFieldCount;
 	auto V8Object = v8::FunctionTemplate::New(isolate);
 	for (auto &field : obj->fields) {
@@ -198,7 +201,8 @@ inline char * IEngine::RunString(char * code, char * exeName) {
 	int argc = 0;
 	name = exeName;
 	auto argv = MakeArgs(code, false, argc);
-	node::Start(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	//node::Start(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	/*run_string_result = ReadCode(code);
 	run_string_result.push_back(0);
 	return run_string_result.data();*/
@@ -257,7 +261,7 @@ void IEngine::InitializeGlobal()
 		auto V8Object = AddV8ObjectTemplate(obj.get());
 		global->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, obj->classtype.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), V8Object);
 	}
-	glob.Reset(isolate, global);
+	//glob.Reset(isolate, global);
 	globalTemplate->objTempl.Reset(isolate, global);
 }
 
@@ -355,7 +359,7 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 
 	for (auto &obj : objects) {
 		auto V8Object = AddV8ObjectTemplate(obj.get());
-		global->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, obj->classtype.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), V8Object);
+		//global->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, obj->classtype.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), V8Object);
 	}
 	global->PrototypeTemplate()->SetInternalFieldCount(ObjectInternalFieldCount);
 	return global->PrototypeTemplate();

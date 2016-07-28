@@ -299,7 +299,7 @@ public:
 	bool DebugMode();
 	virtual int APIENTRY ErrorCode();
 	void SetErrorCode(int code);
-	virtual void APIENTRY InitializeGlobal();
+	_declspec(deprecated) virtual void APIENTRY InitializeGlobal();
 	virtual void APIENTRY SetMethodCallBack(TMethodCallBack callBack);
 	virtual void APIENTRY SetPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetPropSetterCallBack(TSetterCallBack callBack);
@@ -308,7 +308,6 @@ public:
 	virtual void APIENTRY SetIndexedPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetIndexedPropSetterCallBack(TSetterCallBack callBack);
 
-	v8::Persistent<v8::FunctionTemplate> glob;
 	void * globObject = nullptr;
 	IObjectTemplate * globalTemplate = nullptr;
 	void * DEngine = nullptr;
@@ -317,6 +316,7 @@ public:
 	virtual void* GetDelphiClasstype(v8::Local<v8::Object> obj);
 
 	v8::Local<v8::ObjectTemplate> MakeGlobalTemplate(v8::Isolate * iso);
+	v8::Persistent<v8::FunctionTemplate> glob;
 
 private:
 	std::vector<char> run_string_result;

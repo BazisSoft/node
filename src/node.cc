@@ -4558,6 +4558,8 @@ NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func
 		StartNodeInstance(&instance_data, eng);
 		exit_code = instance_data.exit_code();
 	}
+	////TODO: Make debugger end;
+	//DebugEnd();
 	return exit_code;
 }
 

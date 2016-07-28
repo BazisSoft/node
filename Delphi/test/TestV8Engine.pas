@@ -27,6 +27,7 @@ type
     function GetSystem: TJSSystemNamespace;
   public
     constructor Create(Eng: TJSEngine);
+    destructor Destroy;
     property system: TJSSystemNamespace read GetSystem;
     [TGCAttr]
     function NewVectorList: TVectorList;
@@ -76,12 +77,7 @@ end;
 procedure TestTJSEngine.TestCallBack;
 var
   ReturnValue: string;
-  Eng: TJSEngine;
-  Glob: TTestGlobalNamespace;
 begin
-  Eng := TJSEngine.Create;
-  Glob := TTestGlobalNamespace.Create(Eng);
-  Eng.AddGlobal(Glob);
   ReturnValue := FJSEngine.RunFile('TestCallBack.js', ParamStr(0));
   Assert(ReturnValue = '', FJSEngine.Log.Text);
   FJSEngine.Log.SaveToFile('TestCallBack.log');
@@ -90,26 +86,16 @@ end;
 procedure TestTJSEngine.TestHelper;
 var
   ReturnValue: string;
-  Eng: TJSEngine;
-  Glob: TTestGlobalNamespace;
 begin
-  Eng := TJSEngine.Create;
-  Glob := TTestGlobalNamespace.Create(Eng);
-  Eng.AddGlobal(Glob);
-  ReturnValue := Eng.RunFile('TestHelper.js', ParamStr(0));
-  Assert(ReturnValue = '', Eng.Log.Text);
-  Eng.Log.SaveToFile('TestHelper.log');
+  ReturnValue := FJSEngine.RunFile('TestHelper.js', ParamStr(0));
+  Assert(ReturnValue = '', FJSEngine.Log.Text);
+  FJSEngine.Log.SaveToFile('TestHelper.log');
 end;
 
 procedure TestTJSEngine.TestObjects;
 var
   ReturnValue: string;
-  Eng: TJSEngine;
-  Glob: TTestGlobalNamespace;
 begin
-  Eng := TJSEngine.Create;
-  Glob := TTestGlobalNamespace.Create(Eng);
-  Eng.AddGlobal(Glob);
   ReturnValue := FJSEngine.RunFile('TestObjects.js', ParamStr(0));
   Assert(ReturnValue = '', FJSEngine.Log.Text);
   FJSEngine.Log.SaveToFile('TestObjects.log');
@@ -125,6 +111,12 @@ begin
   FEng.RegisterHelper(TSomeObject, FHelper);
   FEng.RegisterHelper(TSomeChild, FChildHelper);
   FSys := Eng.GetSystem;
+end;
+
+destructor TTestGlobalNamespace.Destroy;
+begin
+  FreeAndNil(FHelper);
+  FreeAndNil(FChildHelper);
 end;
 
 function TTestGlobalNamespace.GetSystem: TJSSystemNamespace;
