@@ -4507,4 +4507,45 @@ int Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
   return exit_code;
 }
 
+void InitIalize(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr) {
+	exit = func;
+	PlatformInit();
+
+	CHECK_GT(argc, 0);
+
+	// Hack around with the argv pointer. Used for process.title = "blah".
+	argv = uv_setup_args(argc, argv);
+
+	// This needs to run *before* V8::Initialize().  The const_cast is not
+	// optional, in case you're wondering.
+	Init(&argc, const_cast<const char**>(argv), &exec_argc_, &exec_argv_);
+
+#if HAVE_OPENSSL
+#ifdef NODE_FIPS_MODE
+	// In the case of FIPS builds we should make sure
+	// the random source is properly initialized first.
+	OPENSSL_init();
+#endif  // NODE_FIPS_MODE
+	// V8 on Windows doesn't have a good source of entropy. Seed it from
+	// OpenSSL's pool.
+	V8::SetEntropySource(crypto::EntropySource);
+#endif
+
+	v8_platform.Initialize(v8_thread_pool_size);
+	V8::Initialize();
+
+}
+
+void Dispose()
+{
+	V8::Dispose();
+
+	v8_platform.Dispose();
+
+	delete[] exec_argv_;
+	exec_argv_ = nullptr;
+
+	//return exit_code;
+}
+
 }  // namespace node
