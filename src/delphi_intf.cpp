@@ -220,8 +220,11 @@ char * IEngine::RunFile(char * fName, char * exeName)
 	name = exeName;
 	auto argv = MakeArgs(fName, true, argc);
 	//node::Start(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
-	node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
-	return nullptr;
+	int exit_code = node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	auto res = std::to_string(exit_code);
+	run_string_result = std::vector<char>(res.c_str(), res.c_str() + res.length());
+	run_string_result.push_back(0);
+	return run_string_result.data();
 }
 
 void IEngine::SetDebug(bool debug)

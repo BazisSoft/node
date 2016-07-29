@@ -123,14 +123,13 @@ begin
   Writeln('===========TEST==========');
   try
     Eng := TJSEngine.Create;
-    Eng.Debug := True;
+//    Eng.Debug := True;
     Global := TGlobalNamespace.Create(Eng);
     try
       Eng.AddGlobal(Global);
       ///
 //      Eng.RunScript('a = 2; a++; system.log(a)', ParamStr(0));
-      Eng.RunFile('1.js', ParamStr(0));
-      Eng.RunFile('1.js', ParamStr(0));
+      Eng.RunFile('D:\Bazis10\V8Script\node-delphi\scripts\1.js', ParamStr(0));
       // <<----send log to user-----
       if Eng.Log.Count > 0 then
       begin

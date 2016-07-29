@@ -162,7 +162,9 @@ type
   procedure FinalizeNode(); cdecl; external 'node.dll';
 
 implementation
+
 initialization
+
 finalization
     FinalizeNode;
 end.
