@@ -1,9 +1,9 @@
 cb = NewCallBackClass();
-system.log('callback class created');
 cb.OnClick = function (){
-	system.log('callback OnClick called');
-}
-system.log('callback func set');
-system.log('start to make Click');
-cb.MakeClick();
-system.log('Click was made');
+	system.log('Value changing');
+};
+system.log(cb.Value);
+system.log('Setting value');
+cb.Value = 40;
+system.log('value was set');
+system.log(cb.Value);
