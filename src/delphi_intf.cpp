@@ -127,8 +127,6 @@ std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& ar
 
 v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * obj)
 {
-	if (!obj->objTempl.IsEmpty())
-		return obj->objTempl.Get(isolate);
 	obj->objTempl.Empty();
 	obj->FieldCount = ObjectInternalFieldCount;
 	auto V8Object = v8::FunctionTemplate::New(isolate);

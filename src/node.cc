@@ -4444,6 +4444,8 @@ static void StartNodeInstance(void* arg, void* eng) {
     __lsan_do_leak_check();
 #endif
   }
+  ///it is here for allowing to run more scripts at one process - Letos;
+  debugger_running = false;
 
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
@@ -4558,8 +4560,6 @@ NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func
 		StartNodeInstance(&instance_data, eng);
 		exit_code = instance_data.exit_code();
 	}
-	////TODO: Make debugger end;
-	//DebugEnd();
 	return exit_code;
 }
 

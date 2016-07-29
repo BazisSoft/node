@@ -131,7 +131,7 @@ begin
       ///
 //      Eng.RunScript('a = 2; a++; system.log(a)', ParamStr(0));
       Eng.RunFile('1.js', ParamStr(0));
-//      Eng.RunFile('1.js', ParamStr(0));
+      Eng.RunFile('1.js', ParamStr(0));
       // <<----send log to user-----
       if Eng.Log.Count > 0 then
       begin
