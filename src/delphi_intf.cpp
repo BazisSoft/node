@@ -5,14 +5,32 @@
 
 namespace Bv8 {
 
-BZINTF IEngine *BZDECL Bazis::InitEngine(void * DEngine)
-{
-	return new IEngine(DEngine);
-}
+namespace Bazis {
+	bool nodeInitialized = false;
 
-BZINTF int BZDECL Bazis::GetEngineVersion()
-{
-	return 101;
+	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
+	{
+		if (!nodeInitialized) {
+			std::vector<char *> args;
+			args.push_back("");
+			node::InitIalize(1, args.data());
+			nodeInitialized = true;
+		}
+		return new IEngine(DEngine);
+	}
+
+	BZINTF void BZDECL FinalizeNode()
+	{
+		if (nodeInitialized) {
+			node::Dispose();
+			nodeInitialized = false;
+		}
+	}
+
+	BZINTF int BZDECL GetEngineVersion()
+	{
+		return 101;
+	}
 }
 
 uint32_t EngineSlot = 0;
@@ -151,17 +169,6 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 	V8Object->PrototypeTemplate()->SetInternalFieldCount(obj->FieldCount);
 	obj->objTempl.Reset(isolate, V8Object);
 	return V8Object;
-}
-
-void IEngine::InitNode(char * execPath)
-{
-	if (!node_initialized) {
-		int argc = 0;
-		name = execPath;
-		auto argv = MakeArgs("", false, argc);
-		node::InitIalize(argc, argv.data(), [this](int code) {this->SetErrorCode(code); });
-		node_initialized = true;
-	}
 }
 
 IObjectTemplate * IEngine::AddGlobal(void * dClass, void * object)

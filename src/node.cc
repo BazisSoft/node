@@ -4513,8 +4513,7 @@ int Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
 int exec_argc_ = 0;
 const char** exec_argv_ = nullptr;
 
-void InitIalize(int argc, char *argv[], std::function<void(int)> func) {
-	exit = func;
+void InitIalize(int argc, char *argv[]) {
 	PlatformInit();
 
 	CHECK_GT(argc, 0);
@@ -4539,11 +4538,11 @@ void InitIalize(int argc, char *argv[], std::function<void(int)> func) {
 
 	v8_platform.Initialize(v8_thread_pool_size);
 	V8::Initialize();
-
 }
 
 NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func, void * eng)
 {
+	exit = func;
 	int exit_code = 1;
 
 	int v8_argc;

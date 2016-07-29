@@ -27,7 +27,7 @@ type
     function GetSystem: TJSSystemNamespace;
   public
     constructor Create(Eng: TJSEngine);
-    destructor Destroy;
+    destructor Destroy; override;
     procedure log(str: string);
     property system: TJSSystemNamespace read GetSystem;
     [TGCAttr]
@@ -118,12 +118,11 @@ var
   Global: TGlobalNamespace;
   Eng: TJSEngine;
 begin
+  Math.SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
+    exUnderflow, exPrecision]);
   Writeln('===========TEST==========');
   try
-    Math.SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
-      exUnderflow, exPrecision]);
     Eng := TJSEngine.Create;
-    Eng.Init(ParamStr(0));
     Eng.Debug := True;
     Global := TGlobalNamespace.Create(Eng);
     try

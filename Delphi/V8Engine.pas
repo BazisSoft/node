@@ -99,7 +99,6 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure Init(ExePath: string);
     function AddClass(cType: TClass): TJSClass;
     function AddGlobal(global: TObject): TJSClass;
     procedure RegisterHelper(CType: TClass; HelperObject: TJSClassExtender);
@@ -675,6 +674,7 @@ begin
   FLog := TStringList.Create;
   FClasses := TClassMap.Create;
   FEngine := InitEngine(Self);
+  FDebug := False;
   if not Assigned(FEngine) then
     raise Exception.Create('Engine is not initialized, I don''t know why exception didn''t created before');
   FGarbageCollector := TObjects.Create;
@@ -759,14 +759,6 @@ end;
 function TJSEngine.GetSystem: TJSSystemNamespace;
 begin
   Result := FSystem;
-end;
-
-procedure TJSEngine.Init(ExePath: string);
-var
-  PAnsiPath: PAnsiChar;
-begin
-  PAnsiPath := PAnsiChar(AnsiString(ExePath));
-  FEngine.InitNode(PAnsiPath);
 end;
 
 function TJSEngine.RunFile(code, appPath: string): string;

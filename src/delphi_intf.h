@@ -13,6 +13,7 @@
 #define APIENTRY __stdcall
 #define BZINTF _declspec(dllexport)
 #define BZDECL __cdecl
+#define BZDEPRECATED _declspec(deprecated)
 
 
 namespace Bv8 {
@@ -289,7 +290,6 @@ public:
 
 	v8::Local<v8::FunctionTemplate> AddV8ObjectTemplate(IObjectTemplate * obj);
 
-	virtual void APIENTRY InitNode(char * execPath);
 	virtual IObjectTemplate * APIENTRY AddGlobal(void * dClass, void * object);
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);
@@ -299,7 +299,7 @@ public:
 	bool DebugMode();
 	virtual int APIENTRY ErrorCode();
 	void SetErrorCode(int code);
-	_declspec(deprecated) virtual void APIENTRY InitializeGlobal();
+	BZDEPRECATED virtual void APIENTRY InitializeGlobal();
 	virtual void APIENTRY SetMethodCallBack(TMethodCallBack callBack);
 	virtual void APIENTRY SetPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetPropSetterCallBack(TSetterCallBack callBack);
@@ -365,8 +365,9 @@ private:
 
 namespace Bazis {
 extern "C" {
-
 	BZINTF IEngine* BZDECL InitEngine(void * DEngine);
+
+	BZINTF void BZDECL FinalizeNode();
 
 	BZINTF int BZDECL GetEngineVersion();
 
