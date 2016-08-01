@@ -2,7 +2,7 @@ unit ScriptInterface;
 
 interface
 
-uses RTTI, V8Interface, TypInfo;
+uses RTTI, V8Interface, TypInfo, SysUtils;
 
 type
   TScriptOption = class
@@ -33,6 +33,9 @@ type
     FSource: TObject;
   public
     property Source: TObject Read FSource Write FSource;
+  end;
+
+  EScriptEngineException = class(Exception)
   end;
 
 implementation

@@ -676,7 +676,7 @@ begin
   FEngine := InitEngine(Self);
   FDebug := False;
   if not Assigned(FEngine) then
-    raise Exception.Create('Engine is not initialized, I don''t know why exception didn''t created before');
+    raise EScriptEngineException.Create('Engine is not initialized, I don''t know why exception didn''t created before');
   FGarbageCollector := TObjects.Create;
   FSystem := TJSSystemNamespace.Create(Self, '');
   FJSExtenders := TJSExtenderMap.Create;
