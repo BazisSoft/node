@@ -78,7 +78,7 @@ procedure TestTJSEngine.TestCallBack;
 var
   ReturnValue: string;
 begin
-  ReturnValue := FJSEngine.RunFile('D:\Bazis10\V8Script\node-delphi\scripts\TestCallBack.js', ParamStr(0));
+  ReturnValue := FJSEngine.RunFile('..\scripts\TestCallBack.js', ParamStr(0));
   FJSEngine.Log.Add('<<ReturnCode>> ' + ReturnValue);
   FJSEngine.Log.SaveToFile('TestCallBack.log');
   Assert(ReturnValue = '0', FJSEngine.Log.Text);
@@ -88,7 +88,7 @@ procedure TestTJSEngine.TestHelper;
 var
   ReturnValue: string;
 begin
-  ReturnValue := FJSEngine.RunFile('D:\Bazis10\V8Script\node-delphi\scripts\TestHelper.js', ParamStr(0));
+  ReturnValue := FJSEngine.RunFile('..\scripts\TestHelper.js', ParamStr(0));
   FJSEngine.Log.Add('<<ReturnCode>> ' + ReturnValue);
   FJSEngine.Log.SaveToFile('TestHelper.log');
   Assert(ReturnValue = '0', FJSEngine.Log.Text);
@@ -98,7 +98,7 @@ procedure TestTJSEngine.TestObjects;
 var
   ReturnValue: string;
 begin
-  ReturnValue := FJSEngine.RunFile('D:\Bazis10\V8Script\node-delphi\scripts\TestObjects.js', ParamStr(0));
+  ReturnValue := FJSEngine.RunFile('..\scripts\TestObjects.js', ParamStr(0));
   FJSEngine.Log.Add('<<ReturnCode>> ' + ReturnValue);
   FJSEngine.Log.SaveToFile('TestObjects.log');
   Assert(ReturnValue = '0', FJSEngine.Log.Text);
