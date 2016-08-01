@@ -769,7 +769,6 @@ begin
   Self.Code := code;
   Result := '';
   AnsiStr := AnsiString(code);
-  FEngine.InitializeContext;
   FEngine.SetDebug(Debug);
   CharPtr := FEngine.RunFile(PansiChar(AnsiStr), PansiChar(AnsiString(appPath)));
   if Assigned(CharPtr) then  
@@ -783,7 +782,6 @@ begin
   Self.Code := code;
   Result := '';
   AnsiStr := AnsiString(code);
-  FEngine.InitializeContext;
   FEngine.SetDebug(Debug);
   Result := string(FEngine.RunString(PansiChar(AnsiStr), PansiChar(AnsiString(appPath))));;
 end;

@@ -188,7 +188,7 @@ NODE_EXTERN extern bool force_fips_crypto;
 #endif
 
 NODE_EXTERN int Start(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
-///
+/// splitted 'Start' method for using in Delphi;
 NODE_EXTERN void InitIalize(int argc, char *argv[]);
 NODE_EXTERN int RunScript(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
 NODE_EXTERN void Dispose();

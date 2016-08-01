@@ -4508,8 +4508,8 @@ int Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
 
   return exit_code;
 }
-/// node rerun methods
 
+/// node rerun methods
 int exec_argc_ = 0;
 const char** exec_argv_ = nullptr;
 
@@ -4570,8 +4570,6 @@ void Dispose()
 
 	delete[] exec_argv_;
 	exec_argv_ = nullptr;
-
-	//return exit_code;
 }
 
 }  // namespace node
