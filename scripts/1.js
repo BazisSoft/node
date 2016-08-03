@@ -1,4 +1,4 @@
-system.include('..\\scripts\\TestCallBack.js');
+system.include('TestCallBack.js');
 a = 23;
 /*obj = NewSomeObject();
 obj.Value = 10;

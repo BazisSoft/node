@@ -86,15 +86,12 @@ type
     FEngine: IEngine;
     FGarbageCollector: TObjects;
     FJSExtenders: TJSExtenderMap;
-    FFilename: string;
-    FCode: string;
+    FScriptName: string;
     FDebug: boolean;
 
     procedure SetGarbageCollector(const Value: TObjects);
     procedure SetClasses(const Value: TClassMap);
-    procedure SetCode(const Value: string);
     procedure SetDebug(const Value: boolean);
-    procedure SetFilename(const Value: string);
 
   public
     constructor Create;
@@ -115,11 +112,9 @@ type
     property Log: TStrings read FLog;
     property Classes: TClassMap read FClasses write SetClasses;
     property Debug: boolean read FDebug write SetDebug;
-    property Code: string read FCode write SetCode;
-    property Filename: string read FFilename write SetFilename;
     function RunScript(code, appPath: string): string;
-    function RunFile(code, appPath: string): string; overload;
-    function RunIncludeFile(code: string): string; overload;
+    function RunFile(fileName, appPath: string): string; overload;
+    function RunIncludeFile(FileName: string): string; overload;
     procedure SetClassIntoContext(cl: TJSClass);
     procedure SetRecordIntoContext(ValRecord: TValue; RecDescr: TRttiType; JSRecord: IRecord);
     function GetSystem: TJSSystemNamespace;
@@ -753,28 +748,47 @@ begin
   Result := FSystem;
 end;
 
-function TJSEngine.RunFile(code, appPath: string): string;
+function TJSEngine.RunFile(fileName, appPath: string): string;
 var
   AnsiStr: AnsiString;
   CharPtr: PAnsiChar;
+  AppDir: string;
 begin
-  Self.Code := code;
+  AppDir := ExtractFilePath(appPath);
+  try
+    FScriptName := TPath.Combine(AppDir, fileName);
+  except
+    on E: EArgumentException do
+    begin
+      FLog.Add('Run script: ' + E.Message);
+      Exit('Run script: ' + E.Message);
+    end;
+  end;
   Result := '';
-  AnsiStr := AnsiString(code);
+  AnsiStr := AnsiString(FScriptName);
   FEngine.SetDebug(Debug);
   CharPtr := FEngine.RunFile(PansiChar(AnsiStr), PansiChar(AnsiString(appPath)));
-  if Assigned(CharPtr) then  
+  if Assigned(CharPtr) then
     Result := string(CharPtr);
 end;
 
-function TJSEngine.RunIncludeFile(code: string): string;
+function TJSEngine.RunIncludeFile(FileName: string): string;
 var
   AnsiStr: AnsiString;
   CharPtr: PAnsiChar;
+  ScriptFullPath: string;
 begin
-  Self.Code := code;
   Result := '';
-  AnsiStr := AnsiString(code);
+  try
+    ScriptFullPath := TPath.Combine(ExtractFilePath(FScriptName), FileName);
+  except
+    on E: EArgumentException do
+    begin
+      FLog.Add('Include file: ' + E.Message);
+      Exit('Include file: ' + E.Message);
+    end;
+  end;
+  AnsiStr := AnsiString(ScriptFullPath);
   FEngine.SetDebug(Debug);
   CharPtr := FEngine.RunIncludeFile(PansiChar(AnsiStr));
   if Assigned(CharPtr) then
@@ -786,7 +800,6 @@ var
   AnsiStr: AnsiString;
   CharPtr: PAnsiChar;
 begin
-  Self.Code := code;
   Result := '';
   AnsiStr := AnsiString(code);
   FEngine.SetDebug(Debug);
@@ -885,23 +898,11 @@ begin
   end;
 end;
 
-procedure TJSEngine.SetCode(const Value: string);
-begin
-  FCode := Value;
-  FFilename := '';
-end;
-
 procedure TJSEngine.SetDebug(const Value: boolean);
 begin
   FDebug := Value;
   if Assigned(FEngine) then  
     FEngine.SetDebug(Value);
-end;
-
-procedure TJSEngine.SetFilename(const Value: string);
-begin
-  FFilename := Value;
-  FCode := '';
 end;
 
 procedure TJSEngine.SetGarbageCollector(const Value: TObjects);
