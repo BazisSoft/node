@@ -2,21 +2,29 @@
 
 #include <iostream>
 #include <sstream>
+#include <fstream>
+#include <streambuf>
 
 namespace Bv8 {
+std::string _exe_name;
 
 namespace Bazis {
 	bool nodeInitialized = false;
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
 	{
-		if (!nodeInitialized) {
-			std::vector<char *> args;
-			args.push_back("");
-			node::InitIalize(1, args.data());
-			nodeInitialized = true;
+		try {
+			if (!nodeInitialized) {
+				std::vector<char *> args;
+				args.push_back("");
+				node::InitIalize(1, args.data());
+				nodeInitialized = true;
+			}
+			return new IEngine(DEngine);
 		}
-		return new IEngine(DEngine);
+		catch(node::V8Exception &e){
+			return nullptr;
+		}
 	}
 
 	BZINTF void BZDECL FinalizeNode()
@@ -86,7 +94,7 @@ std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& ar
 
 v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * obj)
 {
-	obj->objTempl.Empty();
+	//obj->objTempl.Empty();
 	obj->FieldCount = ObjectInternalFieldCount;
 	auto V8Object = v8::FunctionTemplate::New(isolate);
 	for (auto &field : obj->fields) {
@@ -139,22 +147,65 @@ static void log(const v8::FunctionCallbackInfo<v8::Value>& args) {
 }
 
 inline char * IEngine::RunString(char * code, char * exeName) {
-	int argc = 0;
-	name = exeName;
-	auto argv = MakeArgs(code, false, argc);
-	node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	try {
+		int argc = 0;
+		name = exeName;
+		auto argv = MakeArgs(code, false, argc);
+		node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	}
+	catch (node::V8Exception &e) {
+		errCode = 1000;
+	}
 	auto res = std::to_string(errCode);
 	run_string_result = std::vector<char>(res.c_str(), res.c_str() + res.length());
 	run_string_result.push_back(0);
 	return run_string_result.data();
 }
 
-char * IEngine::RunFile(char * fName, char * exeName)
+char * IEngine::RunFileWithExePath(char * fName, char * exeName)
 {
-	int argc = 0;
-	name = exeName;
-	auto argv = MakeArgs(fName, true, argc);
-	node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	try {
+		int argc = 0;
+		name = exeName;
+		if (name != "")
+			_exe_name = name;
+		auto argv = MakeArgs(fName, true, argc);
+		node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+	}
+	catch (node::V8Exception &e) {
+		errCode = 1000;
+	}
+	auto res = std::to_string(errCode);
+	run_string_result = std::vector<char>(res.c_str(), res.c_str() + res.length());
+	run_string_result.push_back(0);
+	return run_string_result.data();
+}
+
+char * IEngine::RunOneMoreFile(char * fName)
+{
+	char * ExePath = &*(_exe_name.begin());
+	///TODO: make calling "include" method;
+	/*if (!cur_env)
+		throw(node::V8Exception());*/
+
+	v8::Local<v8::String> source;
+	{
+		std::ifstream t(fName);
+		std::stringstream buffer;
+		buffer << t.rdbuf();
+		source = v8::String::NewFromUtf8(isolate, buffer.str().c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+	}
+
+	v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, fName, v8::NewStringType::kNormal).ToLocalChecked());
+	auto context = isolate->GetCurrentContext();
+	//for debug>>>>>>>>>
+
+	//<<<<<<<<<for debug
+	v8::Local<v8::Script> script;
+	if (v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
+		script->Run(context);
+	}
+
 	auto res = std::to_string(errCode);
 	run_string_result = std::vector<char>(res.c_str(), res.c_str() + res.length());
 	run_string_result.push_back(0);
@@ -231,6 +282,8 @@ void * IEngine::GetDelphiObject(v8::Local<v8::Object> holder)
 
 void * IEngine::GetDelphiClasstype(v8::Local<v8::Object> obj)
 {
+	v8::String::Utf8Value objstring(obj->ToString());
+	v8::String::Utf8Value objDetString(obj->ToDetailString());
 	int count = obj->InternalFieldCount();
 	// remove it if will be better way (needs only for "different global objects") ----
 	if (count < 1) {
@@ -278,6 +331,7 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 IEngine::IEngine(void * DEngine)
 {
 	this->DEngine = DEngine;
+	cur_env = nullptr;
 }
 
 IEngine::~IEngine()

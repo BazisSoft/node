@@ -1744,11 +1744,11 @@ void GetActiveHandles(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(ary);
 }
 
-
 NO_RETURN void Abort() {
   DumpBacktrace(stderr);
   fflush(stderr);
-  ABORT_NO_BACKTRACE();
+  throw(v8_exception);
+  /// NODE: ABORT_NO_BACKTRACE();
 }
 
 
@@ -4352,8 +4352,10 @@ static void StartNodeInstance(void* arg, void* eng) {
 #ifdef NODE_ENABLE_VTUNE_PROFILING
   params.code_event_handler = vTune::GetVtuneCodeEventHandler();
 #endif
+  ///
   Isolate* isolate = Isolate::New(params);
 
+  isolate->Enter();
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
     if (instance_data->is_main()) {
@@ -4440,6 +4442,8 @@ static void StartNodeInstance(void* arg, void* eng) {
     RunAtExit(&env);
 
     WaitForInspectorDisconnect(&env);
+	///
+	isolate->Exit();
 #if defined(LEAK_SANITIZER)
     __lsan_do_leak_check();
 #endif
@@ -4540,16 +4544,27 @@ void InitIalize(int argc, char *argv[]) {
 	V8::Initialize();
 }
 
+static bool scripts_running;
+
 NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func, void * eng)
 {
 	exit = func;
-	int exit_code = 1;
+	int exit_code = 0;
 
 	int v8_argc;
 	const char** v8_argv;
+	NodeInstanceType instance_type;
+	bool this_script_is_main = false;
+	if (scripts_running)
+		instance_type = NodeInstanceType::WORKER;
+	else {
+		instance_type = NodeInstanceType::MAIN;
+		scripts_running = true;
+		this_script_is_main = true;
+	}
 	ParseArgs(&argc, const_cast<const char**>(argv), &exec_argc_, &exec_argv_, &v8_argc, &v8_argv);
 	{
-		NodeInstanceData instance_data(NodeInstanceType::MAIN,
+		NodeInstanceData instance_data(instance_type,
 			uv_default_loop(),
 			argc,
 			const_cast<const char**>(argv),
@@ -4557,8 +4572,11 @@ NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func
 			exec_argv_,
 			use_debug_agent);
 		StartNodeInstance(&instance_data, eng);
-		exit_code = instance_data.exit_code();
+		if (instance_type == NodeInstanceType::MAIN)
+			exit_code = instance_data.exit_code();
 	}
+	if (this_script_is_main)
+		scripts_running = false;
 	return exit_code;
 }
 

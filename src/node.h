@@ -179,6 +179,10 @@ typedef intptr_t ssize_t;
 
 namespace node {
 
+
+class V8Exception : public std::exception {
+};
+
 static std::function<void(int)> exit;
 
 NODE_EXTERN extern bool no_deprecation;

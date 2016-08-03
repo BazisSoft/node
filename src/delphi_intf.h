@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <vector>
+#include <stack>
 
 #define APIENTRY __stdcall
 #define BZINTF _declspec(dllexport)
@@ -255,16 +256,17 @@ private:
 	v8::Isolate * iso = nullptr;
 };
 
-
 class IEngine : public IBazisIntf {
 public:
 	~IEngine();
 	IEngine(void * DEngine);
 
+	//std::stack<std::unique_ptr<v8::Isolate>> isolates;
 	v8::Isolate * isolate = nullptr;
 	bool report_exceptions = true;
 	bool print_result = true;
 	bool node_initialized;
+	node::Environment * cur_env;
 
 	std::vector<char *> MakeArgs(char * codeParam, bool isFileName, int& argc);
 
@@ -274,7 +276,8 @@ public:
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);
 	virtual char * APIENTRY RunString(char * code, char * exeName);
-	virtual char * APIENTRY RunFile(char * fName, char * exeName);
+	virtual char * APIENTRY RunFileWithExePath(char * fName, char * exeName);
+	virtual char * APIENTRY RunOneMoreFile(char * fName);
 	virtual void APIENTRY SetDebug(bool debug);
 	bool DebugMode();
 	virtual int APIENTRY ErrorCode();
