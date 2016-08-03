@@ -118,7 +118,8 @@ type
     property Code: string read FCode write SetCode;
     property Filename: string read FFilename write SetFilename;
     function RunScript(code, appPath: string): string;
-    function RunFile(code, appPath: string): string;
+    function RunFile(code, appPath: string): string; overload;
+    function RunIncludeFile(code: string): string; overload;
     procedure SetClassIntoContext(cl: TJSClass);
     procedure SetRecordIntoContext(ValRecord: TValue; RecDescr: TRttiType; JSRecord: IRecord);
     function GetSystem: TJSSystemNamespace;
@@ -166,32 +167,8 @@ begin
 end;
 
 procedure TJSSystemNamespace.include(const filename: string);
-//var
-////  rval: jsval_layout;
-//  LFileStream: TResourceStream;
-//  ResData: TBytes;
-//  Encoding: TEncoding;
-//  BOMLength: Integer;
-//  FileText: string;
 begin
-//  if FResLib <> 0 then
-//  begin
-//    LFileStream := TResourceStream.Create(FResLib,
-//      TPath.GetFileNameWithoutExtension(filename), RT_RCDATA);
-//    try
-//      SetLength(ResData, LFileStream.Size);
-//      LFileStream.ReadBuffer(ResData, Length(ResData));
-//      Encoding := nil;
-//      BOMLength := TEncoding.GetBufferEncoding(ResData, Encoding);
-//      FileText := Encoding.GetString(ResData, BOMLength, Length(ResData) - BOMLength);
-//    finally
-//      LFileStream.Free;
-//    end;
-//  end
-//  else
-//    FileText := TFile.ReadAllText(FPath + filename);
-////  if not FEngine.EvaluateFile(filename, FileText, nil, rval) then
-////    raise Exception.Create('Code tools init failed');
+  FEngine.RunIncludeFile(filename);
 end;
 
 procedure TJSSystemNamespace.log(const text: string);
@@ -310,9 +287,11 @@ var
 begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
+  if not Assigned(cl) then
+    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling field getter');
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
-    raise Exception.Create('Engine is not initialized, or dll error');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   begin
     ClassDescr := Eng.FClasses.Items[cl];
     Field := ClassDescr.FFields.Items[string(args.GetPropName)];
@@ -373,9 +352,11 @@ var
   Eng: TJSEngine;
 begin
   cl := TClass(args.GetDelphiClasstype);
+  if not Assigned(cl) then
+    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling field setter');
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
-    raise Exception.Create('Engine is not initialized, or dll error');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   begin
     ClassDescr := Eng.FClasses.Items[cl];
     Field := ClassDescr.FFields.Items[string(args.GetPropName)];
@@ -400,9 +381,11 @@ var
 begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
+  if not Assigned(cl) then
+    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling indexed prop getter');
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
-    raise Exception.Create('Engine is not initialized, or dll error');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   begin
     ClassDescr := Eng.FClasses.Items[cl];
     Prop := ClassDescr.FDefaultIndexedProp;
@@ -457,9 +440,11 @@ var
 begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
+  if not Assigned(cl) then
+    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling indexed prop setter');
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
-    raise Exception.Create('Engine is not initialized, or dll error');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   begin
     ClassDescr := Eng.FClasses.Items[cl];
     Prop := ClassDescr.FDefaultIndexedProp;
@@ -491,9 +476,11 @@ var
 begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
+  if not Assigned(cl) then
+    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling prop getter');
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
-    raise Exception.Create('Engine is not initialized, or dll error');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   begin
     ClassDescr := Eng.FClasses.Items[cl];
     Prop := ClassDescr.FProps.Items[string(args.GetPropName)];
@@ -573,10 +560,12 @@ var
   Eng: TJSEngine;
 begin
   //invoke right method of right object;
-  cl := TClass(args.GetDelphiClasstype);
   Eng := TJSEngine(args.GetEngine);
+  cl := TClass(args.GetDelphiClasstype);
+  if not Assigned(cl) then
+    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling method');
   if not Assigned(Eng) then
-    raise Exception.Create('Engine is not initialized, or dll error');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   begin
     Overloads := (args.GetDelphiMethod as TMethodOverloadMap);
     count := args.GetArgsCount;
@@ -587,7 +576,8 @@ begin
     method := MethodInfo.Method;
     //TODO: Send Info about parameters count mismatch;
     if not Assigned(Method) or (Length(Method.GetParameters) <> count) then
-      raise Exception.Create(Format('there is no overloads for "%s" method, which takes %d param(s)', [string(args.GetMethodName), count]));
+      raise EScriptEngineException.Create(
+        Format('there is no overloads for "%s" method, which takes %d param(s)', [string(args.GetMethodName), count]));
     Parameters := Method.GetParameters;
     SetLength(Valueargs, count);
     SetArgs(Valueargs, count, Parameters);
@@ -604,7 +594,7 @@ begin
     end
     else
       Result := Method.Invoke(obj, Valueargs);
-      
+
     if Result.IsObject then
       for Attr in Method.GetAttributes do
         if Attr is TGCAttr then
@@ -655,9 +645,11 @@ var
 begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
+  if not Assigned(cl) then
+    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling prop setter');
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
-    raise Exception.Create('Engine is not initialized, or dll error');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   begin
     ClassDescr := Eng.FClasses.Items[cl];
     Prop := ClassDescr.FProps.Items[string(args.GetPropName)];
@@ -676,7 +668,7 @@ begin
   FEngine := InitEngine(Self);
   FDebug := False;
   if not Assigned(FEngine) then
-    raise EScriptEngineException.Create('Engine is not initialized, I don''t know why exception didn''t created before');
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   FGarbageCollector := TObjects.Create;
   FSystem := TJSSystemNamespace.Create(Self, '');
   FJSExtenders := TJSExtenderMap.Create;
@@ -775,15 +767,32 @@ begin
     Result := string(CharPtr);
 end;
 
-function TJSEngine.RunScript(code, appPath: string): string;
+function TJSEngine.RunIncludeFile(code: string): string;
 var
   AnsiStr: AnsiString;
+  CharPtr: PAnsiChar;
 begin
   Self.Code := code;
   Result := '';
   AnsiStr := AnsiString(code);
   FEngine.SetDebug(Debug);
-  Result := string(FEngine.RunString(PansiChar(AnsiStr), PansiChar(AnsiString(appPath))));;
+  CharPtr := FEngine.RunIncludeFile(PansiChar(AnsiStr));
+  if Assigned(CharPtr) then
+    Result := string(CharPtr);
+end;
+
+function TJSEngine.RunScript(code, appPath: string): string;
+var
+  AnsiStr: AnsiString;
+  CharPtr: PAnsiChar;
+begin
+  Self.Code := code;
+  Result := '';
+  AnsiStr := AnsiString(code);
+  FEngine.SetDebug(Debug);
+  CharPtr := FEngine.RunString(PansiChar(AnsiStr), PansiChar(AnsiString(appPath)));
+  if Assigned(CharPtr) then
+    Result := string(CharPtr);
 end;
 
 procedure TJSEngine.SetClasses(const Value: TClassMap);
@@ -905,6 +914,8 @@ procedure TJSEngine.SetRecordIntoContext(ValRecord: TValue; RecDescr: TRttiType;
 var
   FieldArr: TArray<TRttiField>;
   Field: TRttiField;
+  PropArr: TArray<TRttiProperty>;
+  Prop: TRttiProperty;
 begin
   FieldArr := RecDescr.GetFields;
   for Field in FieldArr do
@@ -921,6 +932,41 @@ begin
           Field.GetValue(ValRecord.GetReferenceToRawData).AsExtended);
         tkString: JSRecord.SetField(PAnsiChar(AnsiString(Field.Name)),
           PAnsiChar(AnsiString(Field.GetValue(ValRecord.GetReferenceToRawData).AsString)));
+        tkSet: ;
+        tkClass: ;
+        tkMethod: ;
+        tkWChar: ;
+        tkLString: ;
+        tkWString: ;
+        tkVariant: ;
+        tkArray: ;
+        tkRecord: ;
+        tkInterface: ;
+        tkInt64: ;
+        tkDynArray: ;
+        tkUString: ;
+        tkClassRef: ;
+        tkPointer: ;
+        tkProcedure: ;
+      end;
+    end;
+  end;
+
+  PropArr := RecDescr.GetProperties;
+  for Prop in PropArr do
+  begin
+    if (Prop.Visibility = mvPublic) and (Prop.PropertyType.TypeKind in tkProperties) then
+    begin
+      case Prop.PropertyType.TypeKind of
+        tkUnknown: ;
+        tkInteger: JSRecord.SetField(PAnsiChar(AnsiString(Prop.Name)),
+          Prop.GetValue(ValRecord.GetReferenceToRawData).AsInteger);
+        tkChar: ;
+        tkEnumeration: ;
+        tkFloat: JSRecord.SetField(PAnsiChar(AnsiString(Prop.Name)),
+          Prop.GetValue(ValRecord.GetReferenceToRawData).AsExtended);
+        tkString: JSRecord.SetField(PAnsiChar(AnsiString(Prop.Name)),
+          PAnsiChar(AnsiString(Prop.GetValue(ValRecord.GetReferenceToRawData).AsString)));
         tkSet: ;
         tkClass: ;
         tkMethod: ;

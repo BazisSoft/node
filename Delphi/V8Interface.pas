@@ -144,7 +144,8 @@ type
     function AddObject(classtype: PAnsiChar; dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function GetObject(dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function RunString(code, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
-    function RunFile(fileName, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
+    function RunFile(fileName, ExeName: PAnsiChar): PAnsiChar; overload; virtual; stdcall; abstract;
+    function RunIncludeFile(fileName: PAnsiChar): PAnsiChar; overload; virtual; stdcall; abstract;
     procedure SetDebug(debug: boolean); virtual; stdcall; abstract;
     function ErrorCode: integer; virtual; stdcall; abstract;
     procedure SetMethodCallBack(callBack: TMethodCallBack); virtual; stdcall; abstract;

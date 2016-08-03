@@ -37,7 +37,7 @@ type
     [TGCAttr]
     function NewVector(): TVector3; overload;
     [TGCAttr]
-    function NewCallBack: TCallBackClass;
+    function NewCallBackClass: TCallBackClass;
     [TGCAttr]
     function NewSomeObject: TSomeObject;
     [TGCAttr]
@@ -78,7 +78,7 @@ begin
   Result := arg1 * arg2 * arg3;
 end;
 
-function TGlobalNamespace.NewCallBack: TCallBackClass;
+function TGlobalNamespace.NewCallBackClass: TCallBackClass;
 begin
   Result := TCallBackClass.Create;
 end;
@@ -100,7 +100,7 @@ end;
 
 function TGlobalNamespace.NewVectorList: TVectorList;
 begin
-  Result := TVectorList.Create(False);
+  Result := TVectorList.Create;
 end;
 
 function TGlobalNamespace.Length(vec: TVector3): double;
@@ -127,7 +127,6 @@ begin
     Global := TGlobalNamespace.Create(Eng);
     try
       Eng.AddGlobal(Global);
-      ///
 //      Eng.RunScript('a = 2; a++; system.log(a)', ParamStr(0));
       Eng.RunFile('..\scripts\1.js', ParamStr(0));
       // <<----send log to user-----

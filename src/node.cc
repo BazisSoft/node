@@ -1747,7 +1747,7 @@ void GetActiveHandles(const FunctionCallbackInfo<Value>& args) {
 NO_RETURN void Abort() {
   DumpBacktrace(stderr);
   fflush(stderr);
-  throw(v8_exception);
+  throw(V8Exception());
   /// NODE: ABORT_NO_BACKTRACE();
 }
 
