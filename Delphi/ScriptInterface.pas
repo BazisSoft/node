@@ -2,7 +2,7 @@ unit ScriptInterface;
 
 interface
 
-uses RTTI, V8Interface, TypInfo, SysUtils;
+uses SysUtils;
 
 type
   TScriptOption = class

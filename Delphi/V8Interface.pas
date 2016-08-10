@@ -32,6 +32,7 @@ type
   IValuesArray = class (IEngineIntf)
     function GetCount: integer; virtual; stdcall; abstract;
     function GetValue(index: integer): IValue; virtual; stdcall; abstract;
+    procedure SetValue(value: IValue; index: integer); virtual; stdcall; abstract;
   end;
 
   IRecord = class(IEngineIntf)
@@ -144,8 +145,9 @@ type
     function AddObject(classtype: PAnsiChar; dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function GetObject(dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function RunString(code, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
-    function RunFile(fileName, ExeName: PAnsiChar): PAnsiChar; overload; virtual; stdcall; abstract;
-    function RunIncludeFile(fileName: PAnsiChar): PAnsiChar; overload; virtual; stdcall; abstract;
+    function RunFile(fileName, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
+    function RunIncludeFile(fileName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
+    function CallFunc(FuncName: PAnsiChar; args: IValuesArray): IValue; virtual; stdcall; abstract;
     procedure SetDebug(debug: boolean); virtual; stdcall; abstract;
     function ErrorCode: integer; virtual; stdcall; abstract;
     procedure SetMethodCallBack(callBack: TMethodCallBack); virtual; stdcall; abstract;
@@ -155,6 +157,12 @@ type
     procedure SetFieldSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
+
+    function NewArray(count: integer): IValuesArray; virtual; stdcall; abstract;
+    function NewValue(val: integer): IValue; overload; virtual; stdcall; abstract;
+    function NewValue(val: PAnsiChar): IValue; overload; virtual; stdcall; abstract;
+    function NewValue(val: boolean): IValue; overload; virtual; stdcall; abstract;
+
   end;
 
   function InitEngine(DEngine: TObject): IEngine cdecl; external 'node.dll';

@@ -56,15 +56,20 @@ private:
 	IValue * returnVal = nullptr;
 };
 
-class IArrayValues : public IBazisIntf {
+class IValueArray : public IBazisIntf {
 public:
-	IArrayValues(v8::Isolate * isolate, v8::Local<v8::Array> values_arr);
+	IValueArray(v8::Isolate * isolate, v8::Local<v8::Array> values_arr);
+	IValueArray(v8::Isolate * isolate, int count);
 	virtual int APIENTRY GetCount();
-
 	virtual IValue * APIENTRY GetValue(int index);
+	virtual void APIENTRY SetValue(IValue * value, int index);
+
+	std::vector<v8::Local<v8::Value>> GeV8ValueVector();
+	v8::Local<v8::Array> GetV8Array();
 private:
 	std::vector<std::unique_ptr<IValue>> values;
 	v8::Persistent<v8::Array> arr;
+	int length = -1;
 	v8::Isolate * iso = nullptr;
 };
 
@@ -95,31 +100,32 @@ public:
 	IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index);
 
 	//show arg's classtype 
-	virtual bool APIENTRY ArgIsNumber();;
+	virtual bool APIENTRY ArgIsNumber();
 	virtual bool APIENTRY ArgIsInt();
-	virtual bool APIENTRY ArgIsBool();;
-	virtual bool APIENTRY ArgIsString();;
+	virtual bool APIENTRY ArgIsBool();
+	virtual bool APIENTRY ArgIsString();
 	virtual bool APIENTRY ArgIsObject();
 	virtual bool APIENTRY ArgIsArray();
 	virtual bool APIENTRY ArgIsV8Function();
 
 	//get arg 
-	virtual double APIENTRY GetArgAsNumber();;
+	virtual double APIENTRY GetArgAsNumber();
 	virtual int APIENTRY GetArgAsInt();
-	virtual bool APIENTRY GetArgAsBool();;
-	virtual char* APIENTRY GetArgAsString();;
+	virtual bool APIENTRY GetArgAsBool();
+	virtual char* APIENTRY GetArgAsString();
 	virtual IObject * APIENTRY GetArgAsObject();
-	virtual IArrayValues * APIENTRY GetArgAsArray();
+	virtual IValueArray * APIENTRY GetArgAsArray();
 	virtual IRecord * APIENTRY GetArgAsRecord();
 	virtual IFunction * APIENTRY GetArgAsFunction();
 
 	int GetIndex();
+	v8::Local<v8::Value> GetV8Value();
 private:
 	v8::Persistent<v8::Value> v8Value;
 	v8::Isolate * isolate = nullptr;
 	std::vector<char> run_string_result;
 	IObject * obj = nullptr;
-	IArrayValues * arr = nullptr;
+	IValueArray * arr = nullptr;
 	IRecord * rec = nullptr;
 	IFunction * func = nullptr;
 	int ind = -1;
@@ -278,6 +284,7 @@ public:
 	virtual char * APIENTRY RunString(char * code, char * exeName);
 	virtual char * APIENTRY RunFileWithExePath(char * fName, char * exeName);
 	virtual char * APIENTRY RunOneMoreFile(char * fName);
+	virtual IValue * APIENTRY CallFunc(char * funcName, IValueArray * args);
 	virtual void APIENTRY SetDebug(bool debug);
 	bool DebugMode();
 	virtual int APIENTRY ErrorCode();
@@ -289,6 +296,11 @@ public:
 	virtual void APIENTRY SetFieldSetterCallBack(TSetterCallBack callBack);
 	virtual void APIENTRY SetIndexedPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetIndexedPropSetterCallBack(TSetterCallBack callBack);
+
+	virtual IValueArray * APIENTRY NewArray(int count);
+	virtual IValue * APIENTRY NewInteger(int value);
+	virtual IValue * APIENTRY NewString(char * value);
+	virtual IValue * APIENTRY NewBool(bool value);
 
 	void * globObject = nullptr;
 	IObjectTemplate * globalTemplate = nullptr;
@@ -302,6 +314,7 @@ public:
 
 private:
 	std::vector<char> run_string_result;
+	std::vector<std::unique_ptr<IBazisIntf>> intf_arrays;
 
 
 #ifdef DEBUG
@@ -320,6 +333,7 @@ private:
 	char* name = "";
 	bool debugMode = false;
 	int errCode = 0;
+	IValue * func_result;
 
 	std::vector<std::unique_ptr<IObjectTemplate>> objects;
 	std::vector<std::string> methods;
