@@ -211,7 +211,7 @@ private:
 	std::vector<char> run_string_result;
 	const v8::PropertyCallbackInfo<void> * propinfo = nullptr;
 	const v8::PropertyCallbackInfo<v8::Value> * indexedPropInfo = nullptr;
-	v8::Persistent<v8::Value> newVal;
+	v8::Local<v8::Value> newVal;
 	IValue * setterVal = nullptr;
 };
 
@@ -249,7 +249,7 @@ public:
 
 	std::string classtype;
 	void * DClass = nullptr;
-	v8::Persistent<v8::FunctionTemplate> objTempl;
+	v8::Local<v8::FunctionTemplate> objTempl;
 	IObjectTemplate(std::string objclasstype, v8::Isolate * isolate);
 	std::vector<std::unique_ptr<IObjectProp>> props;
 	std::vector<std::string> fields;
@@ -310,7 +310,6 @@ public:
 	virtual void* GetDelphiClasstype(v8::Local<v8::Object> obj);
 
 	v8::Local<v8::ObjectTemplate> MakeGlobalTemplate(v8::Isolate * iso);
-	v8::Persistent<v8::FunctionTemplate> glob;
 
 private:
 	std::vector<char> run_string_result;

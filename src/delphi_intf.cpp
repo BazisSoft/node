@@ -116,7 +116,7 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 		V8Object->PrototypeTemplate()->SetIndexedPropertyHandler(IndexedPropGetter, IndexedPropSetter);
 	}
 	V8Object->PrototypeTemplate()->SetInternalFieldCount(obj->FieldCount);
-	obj->objTempl.Reset(isolate, V8Object);
+	obj->objTempl = V8Object;
 	return V8Object;
 }
 
@@ -645,7 +645,7 @@ void IMethodArgs::SetReturnValueClass(void * value, void* dClasstype)
 	auto dTempl = eng->GetObjectByClass(dClasstype);
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
-		auto maybeObj = dTempl->objTempl.Get(iso)->PrototypeTemplate()->NewInstance(ctx);
+		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
 		auto obj = maybeObj.ToLocalChecked();
 		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
 		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
@@ -861,7 +861,7 @@ void IGetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 	auto dTempl = eng->GetObjectByClass(dClasstype);
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
-		auto maybeObj = dTempl->objTempl.Get(iso)->PrototypeTemplate()->NewInstance(ctx);
+		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
 		auto obj = maybeObj.ToLocalChecked();
 		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
 		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
@@ -915,8 +915,8 @@ ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<void>& info, char * prop
 	propName = prop;
 	propinfo = &info;
 	iso = info.GetIsolate();
-	newVal.Reset(info.GetIsolate(), newValue);
-	setterVal = new IValue(iso, newVal.Get(iso), 0);
+	newVal = newValue;
+	setterVal = new IValue(iso, newVal, 0);
 }
 
 ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int index, v8::Local<v8::Value> newValue)
@@ -925,8 +925,8 @@ ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int in
 	propInd = index;
 	indexedPropInfo = &info;
 	iso = info.GetIsolate();
-	newVal.Reset(info.GetIsolate(), newValue);
-	setterVal = new IValue(iso, newVal.Get(iso), 0);
+	newVal = newValue;
+	setterVal = new IValue(iso, newVal, 0);
 }
 
 void * ISetterArgs::GetEngine()
@@ -981,8 +981,8 @@ IValue * ISetterArgs::GetValue()
 
 void * ISetterArgs::GetValueAsDObject()
 {
-	if (newVal.Get(iso)->IsObject()) {
-		auto objVal = newVal.Get(iso).As<v8::Object>();
+	if (newVal->IsObject()) {
+		auto objVal = newVal.As<v8::Object>();
 		if (objVal->InternalFieldCount() > 0) {
 			auto objField = objVal->GetInternalField(DelphiObjectIndex);
 			if (objField->IsExternal())
@@ -995,17 +995,17 @@ void * ISetterArgs::GetValueAsDObject()
 
 int ISetterArgs::GetValueAsInt()
 {
-	return newVal.Get(iso)->Int32Value(iso->GetCurrentContext()).FromMaybe(0);
+	return newVal->Int32Value(iso->GetCurrentContext()).FromMaybe(0);
 }
 
 bool ISetterArgs::GetValueAsBool()
 {
-	return newVal.Get(iso)->BooleanValue(iso->GetCurrentContext()).FromMaybe(false);
+	return newVal->BooleanValue(iso->GetCurrentContext()).FromMaybe(false);
 }
 
 char * ISetterArgs::GetValueAsString()
 {
-	v8::String::Utf8Value str(newVal.Get(iso));
+	v8::String::Utf8Value str(newVal);
 	char *it1 = *str;
 	char *it2 = *str + str.length();
 	auto vec = std::vector<char>(it1, it2);
@@ -1016,7 +1016,7 @@ char * ISetterArgs::GetValueAsString()
 
 double ISetterArgs::GetValueAsDouble()
 {
-	return newVal.Get(iso)->NumberValue(iso->GetCurrentContext()).FromMaybe(0.0);
+	return newVal->NumberValue(iso->GetCurrentContext()).FromMaybe(0.0);
 }
 
 IRecord::IRecord(v8::Isolate * isolate)
