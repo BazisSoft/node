@@ -314,7 +314,7 @@ public:
 
 private:
 	std::vector<char> run_string_result;
-	std::vector<std::unique_ptr<IBazisIntf>> intf_arrays;
+	std::vector<std::unique_ptr<IBazisIntf>> IValues;
 
 
 #ifdef DEBUG

@@ -279,28 +279,28 @@ void IEngine::SetIndexedPropSetterCallBack(TSetterCallBack callBack)
 IValueArray * IEngine::NewArray(int count)
 {
 	auto result = std::make_unique<IValueArray>(isolate, count);
-	intf_arrays.push_back(std::move(result));
+	IValues.push_back(std::move(result));
 	return result.get();
 }
 
 IValue * IEngine::NewInteger(int value)
 {
 	auto result = std::make_unique<IValue>(isolate, v8::Integer::New(isolate, value), -1);
-	intf_arrays.push_back(std::move(result));
+	IValues.push_back(std::move(result));
 	return result.get();
 }
 
 IValue * IEngine::NewString(char * value)
 {
 	auto result = std::make_unique<IValue>(isolate, v8::String::NewFromUtf8(isolate, value, v8::NewStringType::kNormal).ToLocalChecked(), -1);
-	intf_arrays.push_back(std::move(result));
+	IValues.push_back(std::move(result));
 	return result.get();
 }
 
 IValue * IEngine::NewBool(bool value)
 {
 	auto result = std::make_unique<IValue>(isolate, v8::Boolean::New(isolate, value), -1);
-	intf_arrays.push_back(std::move(result));
+	IValues.push_back(std::move(result));
 	return result.get();
 }
 
