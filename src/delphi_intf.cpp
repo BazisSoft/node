@@ -183,7 +183,8 @@ char * IEngine::RunIncludeFile(char * fName)
 		std::ifstream t(fName);
 		std::stringstream buffer;
 		buffer << t.rdbuf();
-		auto source_str = buffer.str().c_str();
+		auto buf_str = buffer.str();
+		auto source_str = buf_str.data();
 		source = v8::String::NewFromUtf8(isolate, source_str, v8::NewStringType::kNormal).ToLocalChecked();
 	}
 
