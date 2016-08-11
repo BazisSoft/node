@@ -35,6 +35,11 @@ namespace Bazis {
 		}
 	}
 
+	BZINTF void BZDECL SetExeName(char * name)
+	{
+		_exe_name = name;
+	}
+
 	BZINTF int BZDECL GetEngineVersion()
 	{
 		return 101;
@@ -162,7 +167,7 @@ inline char * IEngine::RunString(char * code, char * exeName) {
 	return run_string_result.data();
 }
 
-char * IEngine::RunFileWithExePath(char * fName, char * exeName)
+char * IEngine::RunFile(char * fName, char * exeName)
 {
 	try {
 		int argc = 0;
@@ -181,7 +186,7 @@ char * IEngine::RunFileWithExePath(char * fName, char * exeName)
 	return run_string_result.data();
 }
 
-char * IEngine::RunOneMoreFile(char * fName)
+char * IEngine::RunIncludeFile(char * fName)
 {
 	char * ExePath = &*(_exe_name.begin());
 
@@ -190,7 +195,8 @@ char * IEngine::RunOneMoreFile(char * fName)
 		std::ifstream t(fName);
 		std::stringstream buffer;
 		buffer << t.rdbuf();
-		source = v8::String::NewFromUtf8(isolate, buffer.str().c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+		auto source_str = buffer.str().c_str();
+		source = v8::String::NewFromUtf8(isolate, source_str, v8::NewStringType::kNormal).ToLocalChecked();
 	}
 
 	v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, fName, v8::NewStringType::kNormal).ToLocalChecked());

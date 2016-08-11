@@ -107,6 +107,7 @@ type
     class procedure callIndexedPropGetter(args: IGetterArgs); static; stdcall;
     class procedure callIndexedPropSetter(args: ISetterArgs); static; stdcall;
     class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs): TRttiMethodInfo;
+    function CallFunction(name: string; Args: IValuesArray): IValue;
 
     property Log: TStrings read FLog;
     property Debug: boolean read FDebug write SetDebug;
@@ -359,6 +360,14 @@ begin
       obj := args.GetDelphiObject;
     Field.SetValue(obj, JsValToTValue(args.GetValue, Field.FieldType));
   end;
+end;
+
+function TJSEngine.CallFunction(name: string; Args: IValuesArray): IValue;
+var
+  AnsiName: AnsiString;
+begin
+  AnsiName := AnsiString(name);
+  Result := FEngine.CallFunc(PAnsiChar(AnsiName), Args);
 end;
 
 class procedure TJSEngine.callIndexedPropGetter(args: IGetterArgs);

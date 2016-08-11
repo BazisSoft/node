@@ -169,6 +169,8 @@ type
 
   procedure FinalizeNode(); cdecl; external 'node.dll';
 
+  procedure SetExeName(name: PAnsiChar); cdecl; external 'node.dll';
+
 implementation
 
 initialization

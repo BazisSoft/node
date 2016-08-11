@@ -282,8 +282,8 @@ public:
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);
 	virtual char * APIENTRY RunString(char * code, char * exeName);
-	virtual char * APIENTRY RunFileWithExePath(char * fName, char * exeName);
-	virtual char * APIENTRY RunOneMoreFile(char * fName);
+	virtual char * APIENTRY RunFile(char * fName, char * exeName);
+	virtual char * APIENTRY RunIncludeFile(char * fName);
 	virtual IValue * APIENTRY CallFunc(char * funcName, IValueArray * args);
 	virtual void APIENTRY SetDebug(bool debug);
 	bool DebugMode();
@@ -359,6 +359,8 @@ extern "C" {
 	BZINTF IEngine* BZDECL InitEngine(void * DEngine);
 
 	BZINTF void BZDECL FinalizeNode();
+
+	BZINTF void BZDECL SetExeName(char * name);
 
 	BZINTF int BZDECL GetEngineVersion();
 
