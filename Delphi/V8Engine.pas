@@ -95,7 +95,7 @@ type
   public
     constructor Create;
     destructor Destroy; override;
-    procedure AddExceptionToIgnored(E: TClass);
+    procedure IgnoreException(E: TClass);
     function AddClass(cType: TClass): TJSClass;
     function AddGlobal(global: TObject): TJSClass;
     procedure RegisterHelper(CType: TClass; HelperObject: TJSClassExtender);
@@ -109,7 +109,7 @@ type
     class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs): TRttiMethodInfo;
     function CallFunction(name: string; Args: IValuesArray): IValue;
 
-    property Log: TStrings read FLog;
+    property ScriptLog: TStrings read FLog;
     property Debug: boolean read FDebug write SetDebug;
     function RunScript(code, appPath: string): string;
     function RunFile(fileName, appPath: string): string; overload;
@@ -167,7 +167,7 @@ end;
 
 procedure TJSSystemNamespace.log(const text: string);
 begin
-  FEngine.Log.Add(text);
+  FEngine.ScriptLog.Add(text);
 end;
 
 { TJSEngine }
@@ -191,7 +191,7 @@ begin
   Result := JsClass;
 end;
 
-procedure TJSEngine.AddExceptionToIgnored(E: TClass);
+procedure TJSEngine.IgnoreException(E: TClass);
 begin
   FIgnoredExceptions.Add(E);
 end;
@@ -674,6 +674,7 @@ begin
   FGarbageCollector := TObjects.Create;
   FSystem := TJSSystemNamespace.Create(Self, '');
   FJSHelpers := TJSExtenderMap.Create;
+  FIgnoredExceptions := TList<TClass>.Create;
   //set callbacks for methods, props, fields;
   FEngine.SetMethodCallBack(callMethod);
   FEngine.SetPropGetterCallBack(callPropGetter);
@@ -693,6 +694,7 @@ begin
   FJSHelpers.Free;
   FGarbageCollector.Clear;
   FGarbageCollector.Free;
+  FIgnoredExceptions.Free;
 end;
 
 class function TJSEngine.GetMethodInfo(List: TRttiMethodList;
@@ -796,7 +798,6 @@ begin
     end;
   end;
   AnsiStr := AnsiString(ScriptFullPath);
-  FEngine.SetDebug(Debug);
   CharPtr := FEngine.RunIncludeFile(PansiChar(AnsiStr));
   if Assigned(CharPtr) then
     Result := string(CharPtr);

@@ -70,7 +70,7 @@ end;
 
 procedure TGlobalNamespace.log(str: string);
 begin
-  FEng.Log.Add(str);
+  FEng.ScriptLog.Add(str);
 end;
 
 function TGlobalNamespace.Multiplicate(arg1, arg2, arg3: double): double;
@@ -130,10 +130,10 @@ begin
 //      Eng.RunScript('a = 2; a++; system.log(a)', ParamStr(0));
       Eng.RunFile('..\scripts\1.js', ParamStr(0));
       // <<----send log to user-----
-      if Eng.Log.Count > 0 then
+      if Eng.ScriptLog.Count > 0 then
       begin
         Writeln('=========================LOG=========================');
-        Writeln(Eng.Log.Text);
+        Writeln(Eng.ScriptLog.Text);
         Writeln('=====================================================');
       end;
       // ------------------------->>
