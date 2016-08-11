@@ -269,12 +269,8 @@ public:
 
 	//std::stack<std::unique_ptr<v8::Isolate>> isolates;
 	v8::Isolate * isolate = nullptr;
-	bool report_exceptions = true;
-	bool print_result = true;
-	bool node_initialized;
-	node::Environment * cur_env;
 
-	std::vector<char *> MakeArgs(char * codeParam, bool isFileName, int& argc);
+	std::vector<char *> MakeArgs(char * codeParam, bool isFileName, int& argc, char * exePath);
 
 	v8::Local<v8::FunctionTemplate> AddV8ObjectTemplate(IObjectTemplate * obj);
 
@@ -315,13 +311,6 @@ private:
 	std::vector<char> run_string_result;
 	std::vector<std::unique_ptr<IBazisIntf>> IValues;
 
-
-#ifdef DEBUG
-	const char* blob_bin_dir = "D:\\Script Editor\\sources\\ScriptEngineLib\\Debug\\";
-#else
-	const char* blob_bin_dir = "D:\\Script Editor\\sources\\ScriptEngineLib\\Release\\";
-#endif
-
 	TMethodCallBack methodCall;
 	TGetterCallBack getterCall;
 	TSetterCallBack setterCall;
@@ -329,7 +318,6 @@ private:
 	TSetterCallBack fieldSetterCall;
 	TGetterCallBack IndPropGetterCall;
 	TSetterCallBack IndPropSetterCall;
-	char* name = "";
 	bool debugMode = false;
 	int errCode = 0;
 	IValue * func_result;
@@ -359,8 +347,6 @@ extern "C" {
 	BZINTF IEngine* BZDECL InitEngine(void * DEngine);
 
 	BZINTF void BZDECL FinalizeNode();
-
-	BZINTF void BZDECL SetExeName(char * name);
 
 	BZINTF int BZDECL GetEngineVersion();
 

@@ -6,7 +6,6 @@
 #include <streambuf>
 
 namespace Bv8 {
-std::string _exe_name;
 
 namespace Bazis {
 	bool nodeInitialized = false;
@@ -35,11 +34,6 @@ namespace Bazis {
 		}
 	}
 
-	BZINTF void BZDECL SetExeName(char * name)
-	{
-		_exe_name = name;
-	}
-
 	BZINTF int BZDECL GetEngineVersion()
 	{
 		return 101;
@@ -64,10 +58,10 @@ IObjectTemplate * IEngine::GetObjectByClass(void * dClass)
 	return nullptr;
 }
 
-std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& argc)
+std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& argc, char * exePath)
 {
 	std::vector<char *> args;
-	args.push_back(name);
+	args.push_back(exePath);
 	argc = 1;
 	static char* arg0 = "";
 	static char* arg1 = "";
@@ -154,8 +148,7 @@ static void log(const v8::FunctionCallbackInfo<v8::Value>& args) {
 inline char * IEngine::RunString(char * code, char * exeName) {
 	try {
 		int argc = 0;
-		name = exeName;
-		auto argv = MakeArgs(code, false, argc);
+		auto argv = MakeArgs(code, false, argc, exeName);
 		node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	}
 	catch (node::V8Exception &e) {
@@ -171,10 +164,7 @@ char * IEngine::RunFile(char * fName, char * exeName)
 {
 	try {
 		int argc = 0;
-		name = exeName;
-		if (name != "")
-			_exe_name = name;
-		auto argv = MakeArgs(fName, true, argc);
+		auto argv = MakeArgs(fName, true, argc, exeName);
 		node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	}
 	catch (node::V8Exception &e) {
@@ -188,8 +178,6 @@ char * IEngine::RunFile(char * fName, char * exeName)
 
 char * IEngine::RunIncludeFile(char * fName)
 {
-	char * ExePath = &*(_exe_name.begin());
-
 	v8::Local<v8::String> source;
 	{
 		std::ifstream t(fName);
@@ -375,7 +363,6 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 IEngine::IEngine(void * DEngine)
 {
 	this->DEngine = DEngine;
-	cur_env = nullptr;
 }
 
 IEngine::~IEngine()
