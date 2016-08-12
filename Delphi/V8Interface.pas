@@ -123,6 +123,7 @@ type
   TMethodCallBack = procedure(args: IMethodArgs); stdcall;
   TGetterCallBack = procedure(args: IGetterArgs); stdcall;
   TSetterCallBack = procedure(args: ISetterArgs); stdcall;
+  TErrorMsgCallBack = procedure(errMsg: PAnsiChar; eng: TObject); stdcall;
 
   IObjectProp = class(IEngineIntf)
     procedure SetRead(read: boolean); virtual; stdcall; abstract;
@@ -157,6 +158,7 @@ type
     procedure SetFieldSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
+    procedure SetErrorMessageCallBack(callBack: TErrorMsgCallBack); virtual; stdcall; abstract;
 
     function NewArray(count: integer): IValuesArray; virtual; stdcall; abstract;
     function NewValue(val: integer): IValue; overload; virtual; stdcall; abstract;

@@ -218,6 +218,7 @@ private:
 typedef void(APIENTRY *TMethodCallBack) (IMethodArgs * args);
 typedef void(APIENTRY *TGetterCallBack) (IGetterArgs * args);
 typedef void(APIENTRY *TSetterCallBack) (ISetterArgs * args);
+typedef void(APIENTRY *TErrorMsgCallBack) (const char * errMsg, void * DEngine);
 
 class IObjectProp : public IBazisIntf {
 public:
@@ -292,6 +293,7 @@ public:
 	virtual void APIENTRY SetFieldSetterCallBack(TSetterCallBack callBack);
 	virtual void APIENTRY SetIndexedPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetIndexedPropSetterCallBack(TSetterCallBack callBack);
+	virtual void APIENTRY SetErrorMsgCallBack(TErrorMsgCallBack callback);
 
 	virtual IValueArray * APIENTRY NewArray(int count);
 	virtual IValue * APIENTRY NewInteger(int value);
@@ -304,6 +306,8 @@ public:
 
 	virtual void* GetDelphiObject(v8::Local<v8::Object> holder);
 	virtual void* GetDelphiClasstype(v8::Local<v8::Object> obj);
+
+	void LogErrorMessage(const char * msg);
 
 	v8::Local<v8::ObjectTemplate> MakeGlobalTemplate(v8::Isolate * iso);
 
@@ -318,6 +322,7 @@ private:
 	TSetterCallBack fieldSetterCall;
 	TGetterCallBack IndPropGetterCall;
 	TSetterCallBack IndPropSetterCall;
+	TErrorMsgCallBack ErrMsgCallBack;
 	bool debugMode = false;
 	int errCode = 0;
 	IValue * func_result;
@@ -341,6 +346,15 @@ private:
 		const v8::PropertyCallbackInfo<void>& info);
 	static void FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
+
+//number of slot in isolate for engine;
+const uint32_t EngineSlot = 0;
+// <<--Object internal fields' consts
+const int DelphiObjectIndex = 0;
+const int DelphiClassTypeIndex = 1;
+
+const int ObjectInternalFieldCount = 2;
+// Object internal fields' consts-->>
 
 namespace Bazis {
 extern "C" {

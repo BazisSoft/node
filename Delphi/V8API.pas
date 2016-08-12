@@ -228,7 +228,7 @@ end;
   function JSValToString(val: jsval): UnicodeString;
   begin
     if val.IsString then
-      result := UnicodeString(val.AsString)
+      result := UTF8ToUnicodeString(RawByteString(val.AsString))
     else
       try
         raise Exception.Create('val is not string');
@@ -324,7 +324,7 @@ end;
       tkChar: Result := string(val.AsString);
       tkEnumeration: ;
       tkFloat: Result := val.AsNumber;
-      tkString: Result := string(val.AsString);
+      tkString: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
       tkSet: ;
       tkClass:
       begin
@@ -332,9 +332,9 @@ end;
           Result := TValue.From<TObject>(val.AsObject.GetDelphiObject)
       end;
       tkMethod: ;
-      tkWChar: Result := string(val.AsString);
-      tkLString: Result := string(val.AsString);
-      tkWString: Result := string(val.AsString);
+      tkWChar: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
+      tkLString: Result := AnsiString(UTF8ToUnicodeString(RawByteString(val.AsString)));
+      tkWString: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
       tkVariant: ;
       tkArray: ;
       tkRecord:
@@ -354,7 +354,8 @@ end;
       tkInterface: ;
       tkInt64: Result := JSValToInt(val);
       tkDynArray: ;
-      tkUString: Result := string(val.AsString);
+
+      tkUString: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
       tkClassRef: ;
       tkPointer: ;
       tkProcedure: ;

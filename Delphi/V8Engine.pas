@@ -91,7 +91,6 @@ type
     FIgnoredExceptions: TList<TClass>;
 
     procedure SetDebug(const Value: boolean);
-
   public
     constructor Create;
     destructor Destroy; override;
@@ -106,6 +105,7 @@ type
     class procedure callFieldSetter(args: ISetterArgs); static; stdcall;
     class procedure callIndexedPropGetter(args: IGetterArgs); static; stdcall;
     class procedure callIndexedPropSetter(args: ISetterArgs); static; stdcall;
+    class procedure SendErrToLog(errMsg: PAnsiChar; eng: TObject); static; stdcall;
     class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs): TRttiMethodInfo;
     function CallFunction(name: string; Args: IValuesArray): IValue;
 
@@ -683,6 +683,7 @@ begin
   FEngine.SetFieldSetterCallBack(callFieldSetter);
   FEngine.SetIndexedPropGetterCallBack(callIndexedPropGetter);
   FEngine.SetIndexedPropSetterCallBack(callIndexedPropSetter);
+  FEngine.SetErrorMessageCallBack(SendErrToLog);
 end;
 
 destructor TJSEngine.Destroy;
@@ -759,7 +760,7 @@ end;
 
 function TJSEngine.RunFile(fileName, appPath: string): string;
 var
-  AnsiStr: AnsiString;
+  RawByteStr: RawByteString;
   CharPtr: PAnsiChar;
   AppDir: string;
 begin
@@ -774,9 +775,9 @@ begin
     end;
   end;
   Result := '';
-  AnsiStr := AnsiString(FScriptName);
+  RawByteStr := UTF8Encode(FScriptName);
   FEngine.SetDebug(Debug);
-  CharPtr := FEngine.RunFile(PansiChar(AnsiStr), PansiChar(AnsiString(appPath)));
+  CharPtr := FEngine.RunFile(PansiChar(RawByteStr), PansiChar(AnsiString(appPath)));
   if Assigned(CharPtr) then
     Result := string(CharPtr);
 end;
@@ -814,6 +815,17 @@ begin
   CharPtr := FEngine.RunString(PansiChar(AnsiStr), PansiChar(AnsiString(appPath)));
   if Assigned(CharPtr) then
     Result := string(CharPtr);
+end;
+
+class procedure TJSEngine.SendErrToLog(errMsg: PAnsiChar; eng: TObject);
+var
+  engine: TJSEngine;
+begin
+  if eng is TJSEngine then
+  begin
+    engine := eng as TJSEngine;
+    engine.ScriptLog.Add(string(errMsg));
+  end;
 end;
 
 procedure TJSEngine.SetClassIntoContext(cl: TJSClass);

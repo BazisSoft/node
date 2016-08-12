@@ -40,14 +40,6 @@ namespace Bazis {
 	}
 }
 
-uint32_t EngineSlot = 0;
-// <<--Object internal fields' consts
-int DelphiObjectIndex = 0;
-int DelphiClassTypeIndex = 1;
-
-int ObjectInternalFieldCount = 2;
-// Object internal fields' consts-->>
-
 IObjectTemplate * IEngine::GetObjectByClass(void * dClass)
 {
 	// TODO: std::unordered_map
@@ -271,6 +263,11 @@ void IEngine::SetIndexedPropSetterCallBack(TSetterCallBack callBack)
 	IndPropSetterCall = callBack;
 }
 
+void IEngine::SetErrorMsgCallBack(TErrorMsgCallBack callback)
+{
+	ErrMsgCallBack = callback;
+}
+
 IValueArray * IEngine::NewArray(int count)
 {
 	auto result = std::make_unique<IValueArray>(isolate, count);
@@ -338,6 +335,13 @@ void * IEngine::GetDelphiClasstype(v8::Local<v8::Object> obj)
 		return nullptr;
 }
 
+void IEngine::LogErrorMessage(const char * msg)
+{
+	if (ErrMsgCallBack) {
+		ErrMsgCallBack(msg, DEngine);
+	}
+}
+
 v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 {
 	isolate = iso;
@@ -364,6 +368,7 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 IEngine::IEngine(void * DEngine)
 {
 	this->DEngine = DEngine;
+	ErrMsgCallBack = nullptr;
 }
 
 IEngine::~IEngine()
@@ -540,7 +545,7 @@ inline bool IValue::GetArgAsBool() {
 }
 
 inline char * IValue::GetArgAsString() {
-	v8::String::Utf8Value str(v8Value.Get(isolate));
+	v8::String::Utf8Value str(v8Value.Get(isolate));	
 	char *it1 = *str;
 	char *it2 = *str + str.length();
 	auto vec = std::vector<char>(it1, it2);
