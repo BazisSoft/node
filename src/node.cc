@@ -237,6 +237,20 @@ static void PrintErrorString(const char* format, ...) {
 #ifdef _WIN32
   HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
 
+  //send err msg to delphi log;
+  {
+	  auto iso = Isolate::GetCurrent();
+	  if (iso) {
+		  auto eng = static_cast<Bv8::IEngine*>(iso->GetData(Bv8::EngineSlot));
+		  if (eng) {
+			  int n = _vscprintf(format, ap);
+			  std::vector<char> out(n + 1);
+			  vsprintf(out.data(), format, ap);
+			  eng->LogErrorMessage(out.data());
+		  }
+	  }
+  }
+
   // Check if stderr is something other than a tty/console
   if (stderr_handle == INVALID_HANDLE_VALUE ||
       stderr_handle == nullptr ||
@@ -250,16 +264,6 @@ static void PrintErrorString(const char* format, ...) {
   int n = _vscprintf(format, ap);
   std::vector<char> out(n + 1);
   vsprintf(out.data(), format, ap);
-
-  //send err msg to delphi log;
-  {
-	  auto iso = Isolate::GetCurrent();
-	  if (iso) {
-		  auto eng = static_cast<Bv8::IEngine*>(iso->GetData(Bv8::EngineSlot));
-		  if (eng)
-			eng->LogErrorMessage(out.data());
-	  }
-  }
 
   // Get required wide buffer size
   n = MultiByteToWideChar(CP_UTF8, 0, out.data(), -1, nullptr, 0);

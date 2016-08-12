@@ -22,9 +22,8 @@ type
   TJSSystemNamespace = class
   private
     FEngine: TJSEngine;
-    FPath: string;
   public
-    constructor Create(AEngine: TJSEngine; const APath: string);
+    constructor Create(AEngine: TJSEngine);
     procedure include(const filename: string);
     procedure log(const text: string);
 
@@ -47,7 +46,7 @@ type
     OverloadsInfo: TRttiMethodList;
     destructor Destroy; override;
   end;
-  TMethodMap = TDictionary<string, TMethodOverloadMap>;
+  TMethodMap = TObjectDictionary<string, TMethodOverloadMap>;
   TPropMap = TDictionary<string, TRttiProperty>;
   TFieldMap = TDictionary<string, TRttiField>;
   TIndexedPropMap = TDictionary<string, TRttiIndexedProperty>;
@@ -81,8 +80,8 @@ type
   private
     FLog: TStrings;
     FClasses: TClassMap;
+    FClassList: TObjectList;
     FGlobal: TObject;
-    FSystem: TJSSystemNamespace;
     FEngine: IEngine;
     FGarbageCollector: TObjects;
     FJSHelpers: TJSExtenderMap;
@@ -116,7 +115,6 @@ type
     function RunIncludeFile(FileName: string): string; overload;
     procedure SetClassIntoContext(cl: TJSClass);
     procedure SetRecordIntoContext(ValRecord: TValue; RecDescr: TRttiType; JSRecord: IRecord);
-    function GetSystem: TJSSystemNamespace;
   end;
 
 
@@ -154,9 +152,8 @@ begin
 //  end;
 end;
 
-constructor TJSSystemNamespace.Create(AEngine: TJSEngine; const APath: string);
+constructor TJSSystemNamespace.Create(AEngine: TJSEngine);
 begin
-  FPath := APath;
   FEngine := AEngine;
 end;
 
@@ -187,6 +184,7 @@ begin
       JsClass.AddHelper(helper);
     FClasses.Add(cType, JsClass);
     SetClassIntoContext(JsClass);
+    FClassList.Add(JsClass);
   end;
   Result := JsClass;
 end;
@@ -260,6 +258,7 @@ begin
   end;
   Result := ClassTemplate;
   FClasses.Add(cType, ClassTemplate);
+  FClassList.Add(ClassTemplate);
 end;
 
 procedure TJSEngine.RegisterHelper(CType: TClass; HelperObject: TJSClassExtender);
@@ -290,14 +289,7 @@ begin
     ClassDescr := Eng.FClasses.Items[cl];
     Field := ClassDescr.FFields.Items[string(args.GetPropName)];
     if cl = Eng.FGlobal.ClassType then
-    begin
-      obj := Eng.FGlobal;
-      if Field.Name = systemFieldName then
-      begin
-        args.SetGetterResult(Eng.FSystem, TJSSystemNamespace);
-        Exit;
-      end;
-    end
+      obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
     Result := Field.GetValue(obj);
@@ -667,12 +659,12 @@ constructor TJSEngine.Create;
 begin
   FLog := TStringList.Create;
   FClasses := TClassMap.Create;
+  FClassList := TObjectList.Create;
   FEngine := InitEngine(Self);
   FDebug := False;
   if not Assigned(FEngine) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   FGarbageCollector := TObjects.Create;
-  FSystem := TJSSystemNamespace.Create(Self, '');
   FJSHelpers := TJSExtenderMap.Create;
   FIgnoredExceptions := TList<TClass>.Create;
   //set callbacks for methods, props, fields;
@@ -695,6 +687,7 @@ begin
   FJSHelpers.Free;
   FGarbageCollector.Clear;
   FGarbageCollector.Free;
+  FClassList.Free;
   FIgnoredExceptions.Free;
 end;
 
@@ -751,11 +744,6 @@ begin
         Exit(method)
     end;
   end;
-end;
-
-function TJSEngine.GetSystem: TJSSystemNamespace;
-begin
-  Result := FSystem;
 end;
 
 function TJSEngine.RunFile(fileName, appPath: string): string;
@@ -824,7 +812,7 @@ begin
   if eng is TJSEngine then
   begin
     engine := eng as TJSEngine;
-    engine.ScriptLog.Add(string(errMsg));
+    engine.ScriptLog.Add(UTF8ToUnicodeString(RawByteString(errMsg)));
   end;
 end;
 
@@ -1092,7 +1080,7 @@ var
 
 begin
   inherited Create();
-  FMethods := TMethodMap.Create;
+  FMethods := TMethodMap.Create([doOwnsValues]);
   FProps := TPropMap.Create;
   FFields := TFieldMap.Create;
   FIndexedProps := TIndexedPropMap.Create;

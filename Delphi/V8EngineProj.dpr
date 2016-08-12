@@ -50,7 +50,7 @@ type
 constructor TGlobalNamespace.Create(Eng: TJSEngine);
 begin
   FEng := Eng;
-  FSys := Eng.GetSystem;
+  FSys := TJSSystemNamespace.Create(Eng);
   FSomeHelper := TSomeObjectHelper.Create;
   FChildHelper := TSomeChildHelper.Create;
   FEng.RegisterHelper(TSomeObject, FSomeHelper);
@@ -59,6 +59,7 @@ end;
 
 destructor TGlobalNamespace.Destroy;
 begin
+  FreeAndNil(FSys);
   FreeAndNil(FSomeHelper);
   FreeAndNil(FChildHelper);
 end;
