@@ -70,7 +70,9 @@ void TTYWrap::GuessHandleType(const FunctionCallbackInfo<Value>& args) {
   case UV_UDP: type = "UDP"; break;
   case UV_FILE: type = "FILE"; break;
   case UV_NAMED_PIPE: type = "PIPE"; break;
-  case UV_UNKNOWN_HANDLE: type = "UNKNOWN"; break;
+  ////for a running script at non-console app
+  case UV_UNKNOWN_HANDLE: type = "TTY"; break;
+  ////case UV_UNKNOWN_HANDLE: type = "UNKNOWN"; break;
   default:
     ABORT();
   }

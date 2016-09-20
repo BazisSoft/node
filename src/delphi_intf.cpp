@@ -50,6 +50,11 @@ IObjectTemplate * IEngine::GetObjectByClass(void * dClass)
 	return nullptr;
 }
 
+bool IEngine::ClassIsRegistered(void * dClass)
+{
+	return (GetObjectByClass(dClass) != nullptr);
+}
+
 std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& argc, char * exePath)
 {
 	std::vector<char *> args;
@@ -95,7 +100,8 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 	for (auto &prop : obj->props) {
 		V8Object->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
 			prop->read? Getter : (v8::AccessorGetterCallback)0,
-			prop->write? Setter : (v8::AccessorSetterCallback)0 );
+			prop->write? Setter : (v8::AccessorSetterCallback)0, 
+			v8::External::New(isolate, prop->obj));
 	}
 
 	auto inc = 0;
@@ -195,6 +201,12 @@ char * IEngine::RunIncludeFile(char * fName)
 	return run_string_result.data();
 }
 
+void IEngine::AddIncludeCode(char * code)
+{
+	include_code += code;
+	include_code += "\n";
+}
+
 IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 {
 	auto context = isolate->GetCurrentContext();
@@ -229,6 +241,18 @@ void IEngine::SetErrorCode(int code)
 	errCode = code;
 }
 
+void IEngine::ExecIncludeCode(v8::Local<v8::Context> context)
+{
+	v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, include_code.c_str(), v8::NewStringType::kNormal).ToLocalChecked();
+
+	v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, "", v8::NewStringType::kNormal).ToLocalChecked());
+	//auto context = isolate->GetCurrentContext();
+	v8::Local<v8::Script> script;
+	if (v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
+		script->Run(context);
+	}
+}
+
 inline void IEngine::SetMethodCallBack(TMethodCallBack callBack) {
 	methodCall = callBack;
 }
@@ -237,6 +261,8 @@ void IEngine::SetPropGetterCallBack(TGetterCallBack callBack)
 {
 	getterCall = callBack;
 }
+
+
 
 void IEngine::SetPropSetterCallBack(TSetterCallBack callBack)
 {
@@ -263,6 +289,21 @@ void IEngine::SetIndexedPropSetterCallBack(TSetterCallBack callBack)
 	IndPropSetterCall = callBack;
 }
 
+void IEngine::SetInterfaceGetterPropCallBack(TGetterCallBack callBack)
+{
+	IFaceGetterPropCall = callBack;
+}
+
+void IEngine::SetInterfaceSetterPropCallBack(TIntfSetterCallBack callBack)
+{
+	IFaceSetterPropCall = callBack;
+}
+
+void IEngine::SetInterfaceMethodCallBack(TMethodCallBack callBack)
+{
+	IFaceMethodCall = callBack;
+}
+
 void IEngine::SetErrorMsgCallBack(TErrorMsgCallBack callback)
 {
 	ErrMsgCallBack = callback;
@@ -282,6 +323,13 @@ IValue * IEngine::NewInteger(int value)
 	return result.get();
 }
 
+IValue * IEngine::NewNumber(double value)
+{
+	auto result = std::make_unique<IValue>(isolate, v8::Number::New(isolate, value), -1);
+	IValues.push_back(std::move(result));
+	return result.get();
+}
+
 IValue * IEngine::NewString(char * value)
 {
 	auto result = std::make_unique<IValue>(isolate, v8::String::NewFromUtf8(isolate, value, v8::NewStringType::kNormal).ToLocalChecked(), -1);
@@ -295,6 +343,23 @@ IValue * IEngine::NewBool(bool value)
 	IValues.push_back(std::move(result));
 	return result.get();
 }
+
+IValue * IEngine::NewObject(void * value, void * classtype)
+{
+	IEngine * eng = static_cast<IEngine*>(isolate->GetData(EngineSlot));
+	IValue * result = nullptr;
+	auto dTempl = eng->GetObjectByClass(classtype);
+	if (dTempl) {
+		auto ctx = isolate->GetCurrentContext();
+		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+		auto obj = maybeObj.ToLocalChecked();
+		obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
+		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
+		result = new IValue(isolate, obj, -1);
+	}
+	return result;
+}
+
 
 void * IEngine::GetDelphiObject(v8::Local<v8::Object> holder)
 {
@@ -345,6 +410,15 @@ void IEngine::LogErrorMessage(const char * msg)
 v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 {
 	isolate = iso;
+
+	////making iface template
+	ifaceTemplate = v8::ObjectTemplate::New(iso);
+	ifaceTemplate->SetInternalFieldCount(ObjectInternalFieldCount);
+	v8::NamedPropertyHandlerConfiguration conf;
+	conf.getter = InterfaceGetter;
+	conf.setter = InterfaceSetter;
+	ifaceTemplate->SetHandler(conf);
+
 	v8::Local<v8::FunctionTemplate> global = v8::FunctionTemplate::New(isolate);
 
 	for (auto &method : globalTemplate->methods) {
@@ -356,6 +430,9 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 
 	for (auto &prop : globalTemplate->props) {
 		global->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), Getter);
+	}
+	for (auto &enumField : globalTemplate->enums) {
+		global->PrototypeTemplate()->Set(isolate, enumField->name.c_str(), v8::Integer::New(isolate, enumField->value));
 	}
 
 	for (auto &obj : objects) {
@@ -369,10 +446,12 @@ IEngine::IEngine(void * DEngine)
 {
 	this->DEngine = DEngine;
 	ErrMsgCallBack = nullptr;
+	include_code = "";
 }
 
 IEngine::~IEngine()
 {
+	node::StopScript();
 }
 
 void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -433,6 +512,38 @@ void IEngine::Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
 	}
 }
 
+void IEngine::InterfaceGetter(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+	////debugging code
+	v8::String::Utf8Value str(property);
+	////
+	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (engine->IFaceGetterPropCall) {
+		v8::String::Utf8Value str(property);
+		auto getterArgs = new IGetterArgs(info, *str);
+		engine->IFaceGetterPropCall(getterArgs);
+	}
+}
+
+void IEngine::InterfaceSetter(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info)
+{
+	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (engine->IFaceSetterPropCall) {
+		v8::String::Utf8Value str(property);
+		auto setterArgs = new IIntfSetterArgs(info, *str, value);
+		engine->IFaceSetterPropCall(setterArgs);
+	}
+}
+
+void IEngine::InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	if (engine->IFaceMethodCall) {
+		auto methodArgs = new IMethodArgs(args);
+		engine->IFaceMethodCall(methodArgs);
+	}
+}
+
 void IEngine::FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
 	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
@@ -449,8 +560,8 @@ inline void IObjectTemplate::SetMethod(char * methodName, void * methodCall) {
 	methods.push_back(std::move(method));
 }
 
-inline void IObjectTemplate::SetProp(char * propName, bool read, bool write) {
-	auto newProp = std::make_unique<IObjectProp>(propName, read, write);
+inline void IObjectTemplate::SetProp(char * propName, void * propObj, bool read, bool write) {
+	auto newProp = std::make_unique<IObjectProp>(propName, propObj, read, write);
 	props.push_back(std::move(newProp));
 }
 
@@ -459,17 +570,15 @@ void IObjectTemplate::SetField(char * fieldName)
 	fields.push_back(fieldName);
 }
 
+void IObjectTemplate::SetEnumField(char * valuename, int value)
+{
+	auto newField = std::make_unique<IDelphiEnumValue>(valuename, value);
+	enums.push_back(std::move(newField));
+}
+
 void IObjectTemplate::SetHasIndexedProps(bool hasIndProps)
 {
 	HasIndexedProps = hasIndProps;
-}
-
-inline void IObjectTemplate::SetClasstype(char * classtype) { classtype = classtype; }
-
-char * IObjectTemplate::GetClasstype()
-{
-	runStringResult = std::vector<char>(classtype.length(), *(classtype.c_str()));
-	return runStringResult.data();
 }
 
 void IObjectTemplate::SetParent(IObjectTemplate * parent)
@@ -478,7 +587,6 @@ void IObjectTemplate::SetParent(IObjectTemplate * parent)
 
 IObjectTemplate::IObjectTemplate(std::string objclasstype, v8::Isolate * isolate)
 {
-	classtype = objclasstype;
 	iso = isolate;
 }
 
@@ -494,27 +602,27 @@ void IObjectProp::setName(char * Aname)
 	name = Aname;
 }
 
-inline IObjectProp::IObjectProp(std::string pName, bool pRead, bool Pwrite) { name = pName; read = pRead; write = Pwrite; }
+inline IObjectProp::IObjectProp(std::string pName, void * pObj, bool pRead, bool Pwrite) { name = pName; read = pRead; write = Pwrite; obj = pObj; }
 
 inline IObjectProp::IObjectProp() {}
 
 //check arg's classtype
 
 inline bool IValue::ArgIsNumber() {
-	return v8Value.Get(isolate)->IsNumber();
+	return v8Value.Get(isolate)->IsNumber() || v8Value.Get(isolate)->IsUndefined();
 }
 
 bool IValue::ArgIsInt()
 {
-	return v8Value.Get(isolate)->IsInt32();
+	return v8Value.Get(isolate)->IsInt32() || v8Value.Get(isolate)->IsUndefined();
 }
 
 inline bool IValue::ArgIsBool() {
-	return v8Value.Get(isolate)->IsBoolean();
+	return v8Value.Get(isolate)->IsBoolean() || v8Value.Get(isolate)->IsUndefined();
 }
 
 inline bool IValue::ArgIsString() {
-	return v8Value.Get(isolate)->IsString();
+	return v8Value.Get(isolate)->IsString() || v8Value.Get(isolate)->IsUndefined();
 }
 
 bool IValue::ArgIsObject()
@@ -523,11 +631,15 @@ bool IValue::ArgIsObject()
 }
 bool IValue::ArgIsArray()
 {
-	return v8Value.Get(isolate)->IsArray();
+	return v8Value.Get(isolate)->IsArray() || v8Value.Get(isolate)->IsUndefined();
 }
 bool IValue::ArgIsV8Function()
 {
-	return v8Value.Get(isolate)->IsFunction();
+	return v8Value.Get(isolate)->IsFunction() || v8Value.Get(isolate)->IsUndefined();
+}
+bool IValue::ArgIsUndefined()
+{
+	return v8Value.Get(isolate)->IsUndefined();
 }
 //get arg 
 
@@ -608,8 +720,15 @@ IValue::IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index)
 void * IMethodArgs::GetDelphiObject()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
-	auto holder = args->Holder();
-	return eng->GetDelphiObject(holder);
+	auto data = args->Data();
+	if (data->IsArray()) {
+		auto val = data.As<v8::Array>()->Get(iso->GetCurrentContext(), 0).ToLocalChecked();
+		return val.As<v8::External>()->Value();
+	}
+	else {
+		auto holder = args->Holder();
+		return eng->GetDelphiObject(holder);
+	}
 }
 
 void * IMethodArgs::GetDelphiClasstype()
@@ -625,16 +744,42 @@ inline int IMethodArgs::GetArgsCount() {
 
 inline char * IMethodArgs::GetMethodName() {
 	v8::Isolate * iso = args->GetIsolate();
-	std::string result = "";
-	v8::String::Utf8Value str(args->Callee()->GetName());
-	char *it1 = *str;
-	char *it2 = *str + str.length();
-	auto vec = std::vector<char>(it1, it2);
-	result += vec.data();
-	result += "\n";
-	run_string_result = vec;
-	run_string_result.push_back(0);
-	return run_string_result.data();
+	auto data = args->Data();
+	//it means, that data was written for delphi interface and contains info about delphi method
+	if (data->IsArray()) {
+		auto val = data.As<v8::Array>()->Get(iso->GetCurrentContext(), 1).ToLocalChecked();
+		v8::String::Utf8Value str(val);
+		char *it1 = *str;
+		char *it2 = *str + str.length();
+		auto vec = std::vector<char>(it1, it2);
+		run_string_result = vec;
+		run_string_result.push_back(0);
+		return run_string_result.data();
+	}
+	else {
+		v8::String::Utf8Value str(args->Callee()->GetName());
+		char *it1 = *str;
+		char *it2 = *str + str.length();
+		auto vec = std::vector<char>(it1, it2);
+		run_string_result = vec;
+		run_string_result.push_back(0);
+		return run_string_result.data();
+	}
+}
+
+void IMethodArgs::SetReturnValueUndefined()
+{
+	args->GetReturnValue().SetUndefined();
+}
+
+void IMethodArgs::SetReturnValueIFace(void * value)
+{
+	v8::Isolate * iso = args->GetIsolate();
+	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	auto ctx = iso->GetCurrentContext();
+	v8::Local<v8::Object> obj = eng->ifaceTemplate->NewInstance(ctx).ToLocalChecked();
+	obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
+	args->GetReturnValue().Set(obj);
 }
 
 void IMethodArgs::SetReturnValueClass(void * value, void* dClasstype)
@@ -645,10 +790,13 @@ void IMethodArgs::SetReturnValueClass(void * value, void* dClasstype)
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
 		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
-		auto obj = maybeObj.ToLocalChecked();
-		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
-		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
-		args->GetReturnValue().Set(obj);
+		if (!maybeObj.IsEmpty()) {
+			auto obj = maybeObj.ToLocalChecked();
+			obj->SetIntegrityLevel(ctx, v8::IntegrityLevel::kSealed);
+			obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
+			obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
+			args->GetReturnValue().Set(obj);
+		}
 	}
 }
 
@@ -853,6 +1001,36 @@ int IGetterArgs::GetPropIndex()
 	return propInd;
 }
 
+void IGetterArgs::SetGetterResultUndefined()
+{
+	propinfo->GetReturnValue().SetUndefined();
+}
+
+void IGetterArgs::SetGetterResultIFace(void * value)
+{
+	v8::Isolate * iso = propinfo->GetIsolate();
+	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	auto ctx = iso->GetCurrentContext();
+	v8::Local<v8::Object> obj = eng->ifaceTemplate->NewInstance(ctx).ToLocalChecked();
+	obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
+	propinfo->GetReturnValue().Set(obj);
+}
+
+void IGetterArgs::SetGetterResultAsInterfaceFunction(void * intf, char * funcName)
+{
+	v8::Isolate * iso = propinfo->GetIsolate();
+	auto ctx = iso->GetCurrentContext();
+	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	auto arr = v8::Array::New(iso, 0);
+	////0 - interface pointer, 1 - function name
+	arr->Set(ctx, 0, v8::External::New(iso, intf));
+	arr->Set(ctx, 1, v8::String::NewFromUtf8(iso, funcName,v8::NewStringType::kNormal).ToLocalChecked());
+	v8::Local<v8::FunctionTemplate> DelphiFuncTemplate = v8::FunctionTemplate::New(iso, eng->InterfaceFuncCallBack, 
+		arr);
+	auto func = DelphiFuncTemplate->GetFunction(ctx).ToLocalChecked();
+	propinfo->GetReturnValue().Set(func);
+}
+
 void IGetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 {
 	v8::Isolate * iso = propinfo->GetIsolate();
@@ -860,7 +1038,7 @@ void IGetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 	auto dTempl = eng->GetObjectByClass(dClasstype);
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
-		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+		auto obj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx).ToLocalChecked();
 		auto obj = maybeObj.ToLocalChecked();
 		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
 		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
@@ -1144,9 +1322,20 @@ void IFunction::AddArgAsNumber(double val)
 	argv.push_back(v8::Number::New(iso, val));
 }
 
-void IFunction::AddArgAsObject(void * obj)
+void IFunction::AddArgAsObject(void * value, void * classtype)
 {
-	argv.push_back(v8::External::New(iso, obj));
+	//argv.push_back(v8::External::New(iso, obj));
+	//// it should work
+	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	auto dTempl = eng->GetObjectByClass(classtype);
+	if (dTempl) {
+		auto ctx = iso->GetCurrentContext();
+		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+		auto obj = maybeObj.ToLocalChecked();
+		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
+		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, classtype));
+		argv.push_back(obj);
+	}
 }
 
 IValue * IFunction::CallFunction()
@@ -1154,7 +1343,84 @@ IValue * IFunction::CallFunction()
 	if (returnVal)
 		returnVal->Delete();
 	returnVal = new IValue(iso, func.Get(iso)->Call(iso->GetCurrentContext(), func.Get(iso), argv.size(), argv.data()).ToLocalChecked(), 0);
+	argv.clear();
 	return returnVal;
+}
+
+IIntfSetterArgs::IIntfSetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, char * prop, v8::Local<v8::Value> newValue)
+{
+	propName = prop;
+	IntfPropInfo = &info;
+	iso = info.GetIsolate();
+	newVal = newValue;
+	setterVal = new IValue(iso, newVal, 0);
+}
+
+void * IIntfSetterArgs::GetEngine()
+{
+	IEngine * engine = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	return engine->DEngine;
+}
+
+void * IIntfSetterArgs::GetDelphiObject()
+{
+	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	v8::Local<v8::Object> holder;
+	holder = IntfPropInfo->Holder();
+	return eng->GetDelphiObject(holder);
+}
+
+char * IIntfSetterArgs::GetPropName()
+{
+	auto vec = std::vector<char>(propName.begin(), propName.end());
+	run_string_result = vec;
+	run_string_result.push_back(0);
+	return run_string_result.data();
+}
+
+IValue * IIntfSetterArgs::GetValue()
+{
+	return setterVal;
+}
+
+void * IIntfSetterArgs::GetValueAsDObject()
+{
+	if (newVal->IsObject()) {
+		auto objVal = newVal.As<v8::Object>();
+		if (objVal->InternalFieldCount() > 0) {
+			auto objField = objVal->GetInternalField(DelphiObjectIndex);
+			if (objField->IsExternal())
+				return objField.As<v8::External>()->Value();
+		}
+
+	}
+	return nullptr;
+}
+
+int IIntfSetterArgs::GetValueAsInt()
+{
+	return newVal->Int32Value(iso->GetCurrentContext()).FromMaybe(0);
+}
+
+bool IIntfSetterArgs::GetValueAsBool()
+{
+	return newVal->BooleanValue(iso->GetCurrentContext()).FromMaybe(false);
+}
+
+char * IIntfSetterArgs::GetValueAsString()
+{
+	v8::String::Utf8Value str(newVal);
+	char *it1 = *str;
+	char *it2 = *str + str.length();
+	auto vec = std::vector<char>(it1, it2);
+	run_string_result = vec;
+	run_string_result.push_back(0);
+	return run_string_result.data();
+}
+
+double IIntfSetterArgs::GetValueAsDouble()
+{
+	return newVal->NumberValue(iso->GetCurrentContext()).FromMaybe(0.0);
 }
 
 }

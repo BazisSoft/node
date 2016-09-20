@@ -2,12 +2,13 @@ unit ScriptInterface;
 
 interface
 
-uses SysUtils;
+uses SysUtils, RTTI;
 
 type
+  // forward declaration
   TScriptOption = class
-  end;//stub
-
+  end;
+{ATTRIBUTES/}
   //attribute for garbage collector
   TGCAttr = class(TCustomAttribute);
   //attribute for allowed object methods, props and fields
@@ -16,20 +17,16 @@ type
   TMethodForbiddenAttr = class(TCustomAttribute);
   //attribute for forbidden objects
   TObjectForbiddenAttr = class(TCustomAttribute);
+  //attribute for callback records
+  TCallBackAttr = class(TCustomAttribute);
+  //attribute for callback 'SetFunction' method
+  TCallBackFuncAttr = class(TCustomAttribute);
+
+  TAttrClass = class of TCustomAttribute;
+{\ATTRIBUTES}
 
   ICallableMethod = interface
-    procedure Call(Sender: TObject);
-  end;
-
-  TOptionEvent = procedure(Sender: TScriptOption) of object;
-
-  TOptionCallback = record
-    Event: TOptionEvent;
-    Callable: ICallableMethod;
-    procedure Call(Sender: TScriptOption);
-    constructor Create(AEvent: TOptionEvent);
-    class operator Implicit(AEvent: TOptionEvent): TOptionCallback;
-    function Assigned: boolean;
+    function Call(const Params: array of TValue): TValue;
   end;
 
   TJSClassExtender = class(TObject)
@@ -39,35 +36,11 @@ type
     property Source: TObject Read FSource Write FSource;
   end;
 
+  TJSExtClass = class of TJSCLassExtender;
+
   EScriptEngineException = class(Exception)
   end;
 
 implementation
-
-{ TOptionCallback }
-
-function TOptionCallback.Assigned: boolean;
-begin
-  Result := System.Assigned(Event) or System.Assigned(Callable);
-end;
-
-procedure TOptionCallback.Call(Sender: TScriptOption);
-begin
-  if System.Assigned(Event) then
-    Event(Sender)
-  else if System.Assigned(Callable) then
-    Callable.Call(Sender);
-end;
-
-constructor TOptionCallback.Create(AEvent: TOptionEvent);
-begin
-  Event := AEvent;
-  Callable := nil;
-end;
-
-class operator TOptionCallback.Implicit(AEvent: TOptionEvent): TOptionCallback;
-begin
-  Result.Event := AEvent;
-end;
 
 end.

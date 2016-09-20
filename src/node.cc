@@ -4357,17 +4357,69 @@ void FreeEnvironment(Environment* env) {
 
 // Entry point for new node instances, also called directly for the main
 // node instance.
+
+////variables for keep script alive after running
+class ScriptParams {
+public:
+	ScriptParams(Isolate * iso) : locker(iso), isolate_scope(iso), h_scope(iso) {};
+	~ScriptParams() {
+	};
+	void SetInstanceData(NodeInstanceData * data) {
+		instance_data = data;
+	};
+	Local<Context> CreateContext(Isolate * iso, Local<ObjectTemplate> global) {
+		ctx = Context::New(iso, NULL, global);
+		return ctx;
+	}
+	NodeInstanceData * GetInstanceData() { return instance_data; };
+
+private:
+	Locker locker;
+	Isolate::Scope isolate_scope;
+	HandleScope h_scope;
+	NodeInstanceData * instance_data;
+	Local<Context> ctx;
+};
+
+class EnvWrapeer {
+public:
+	EnvWrapeer(IsolateData * iso_data, Local<Context> ctx) : env(iso_data, ctx) {};
+	Environment * GetEnvironment() { return &env; };
+private:
+	Environment env;
+};
+
+class IsolateDataWrapper {
+public:
+	IsolateDataWrapper(v8::Isolate* iso, uv_loop_t* event_loop,
+		uint32_t* zero_fill_field = nullptr) : isolate_data(iso, event_loop, zero_fill_field) {};
+	IsolateData * GetData() { return &isolate_data; };
+private:
+	IsolateData isolate_data;
+};
+
+
+Isolate * isolate = nullptr;
+ArrayBufferAllocator array_buffer_allocator;
+ScriptParams * script_params;
+EnvWrapeer * env_wrapper;
+IsolateDataWrapper * iso_data_wrapper;
+////
+
 static void StartNodeInstance(void* arg, void* eng) {
   using namespace Bv8;
+  if (isolate) {
+	  throw V8Exception();
+  }
   NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
   Isolate::CreateParams params;
-  ArrayBufferAllocator array_buffer_allocator;
+  /*ArrayBufferAllocator array_buffer_allocator;*/
   params.array_buffer_allocator = &array_buffer_allocator;
 #ifdef NODE_ENABLE_VTUNE_PROFILING
   params.code_event_handler = vTune::GetVtuneCodeEventHandler();
 #endif
   ///
-  Isolate* isolate = Isolate::New(params);
+  /*Isolate**/ isolate = Isolate::New(params);
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
     if (instance_data->is_main()) {
@@ -4381,96 +4433,126 @@ static void StartNodeInstance(void* arg, void* eng) {
   }
 
   {
-    Locker locker(isolate);
-    Isolate::Scope isolate_scope(isolate);
-    HandleScope handle_scope(isolate);
-	IsolateData isolate_data(isolate, instance_data->event_loop(),
-                             array_buffer_allocator.zero_fill_field());
-    auto global = Local<ObjectTemplate>();
-	if (eng) {
-		IEngine	* engine = static_cast<IEngine *>(eng);
-		global = engine->MakeGlobalTemplate(isolate);
-		isolate->SetData(0, engine);
-	}
-    Local<Context> context = Context::New(isolate, NULL, global);
-	if (eng) {
-		IEngine	* engine = static_cast<IEngine *>(eng);
-		auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked();
-		globalObject->SetInternalField(0, v8::External::New(isolate, engine->globObject));
-		globalObject->SetInternalField(1, v8::External::New(isolate, engine->globalTemplate->DClass));
-	}    
+	  ////Locker locker(isolate);
+	  ////Isolate::Scope isolate_scope(isolate);
+	  ////HandleScope handle_scope(isolate);
+	  script_params = new ScriptParams(isolate);
+	  iso_data_wrapper = new IsolateDataWrapper(isolate, instance_data->event_loop(),
+		  array_buffer_allocator.zero_fill_field());
+	  ////IsolateData isolate_data(isolate, instance_data->event_loop(),
+   ////                            array_buffer_allocator.zero_fill_field());
+	  auto global = Local<ObjectTemplate>();
+	  if (eng) {
+		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  global = engine->MakeGlobalTemplate(isolate);
+		  isolate->SetData(0, engine);
+	  }
+	  ////Local<Context> context = Context::New(isolate, NULL, global);
+	  auto context = script_params->CreateContext(isolate, global);
 
-    Context::Scope context_scope(context);
-    Environment env(&isolate_data, context);
-    env.Start(instance_data->argc(),
-              instance_data->argv(),
-              instance_data->exec_argc(),
-              instance_data->exec_argv(),
-              v8_is_profiling);
+	  if (eng) {
+		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked(); \
+			  globalObject->SetInternalField(0, v8::External::New(isolate, engine->globObject));
+		  globalObject->SetInternalField(1, v8::External::New(isolate, engine->globalTemplate->DClass));
+		  //globalObject->SetIntegrityLevel(context, v8::IntegrityLevel::kSealed);
+	  }
 
-    isolate->SetAbortOnUncaughtExceptionCallback(
-        ShouldAbortOnUncaughtException);
+	  ////Context::Scope context_scope(context);
+	  ////make enter manually without Context::Scope, and context will exit when delphi engine will be destroyed;	
+	  context->Enter();
+	  if (eng) {
+		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  engine->ExecIncludeCode(context);
+	  }
+	  env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
+	  Environment *env = env_wrapper->GetEnvironment();
+	  env->Start(instance_data->argc(),
+		  instance_data->argv(),
+		  instance_data->exec_argc(),
+		  instance_data->exec_argv(),
+		  v8_is_profiling);
 
-    // Start debug agent when argv has --debug
-    if (instance_data->use_debug_agent())
-      StartDebug(&env, debug_wait_connect);
+	  isolate->SetAbortOnUncaughtExceptionCallback(
+		  ShouldAbortOnUncaughtException);
 
-    {
-      Environment::AsyncCallbackScope callback_scope(&env);
-      LoadEnvironment(&env);
-    }
+	  // Start debug agent when argv has --debug
+	  if (instance_data->use_debug_agent())
+		  StartDebug(env, debug_wait_connect);
 
-    env.set_trace_sync_io(trace_sync_io);
+	  {
+		  Environment::AsyncCallbackScope callback_scope(env);
+		  LoadEnvironment(env);
+	  }
 
-    // Enable debugger
-    if (instance_data->use_debug_agent())
-      EnableDebug(&env);
+	  env->set_trace_sync_io(trace_sync_io);
 
-    {
-      SealHandleScope seal(isolate);
-      bool more;
-      do {
-        v8_platform.PumpMessageLoop(isolate);
-        more = uv_run(env.event_loop(), UV_RUN_ONCE);
+	  // Enable debugger
+	  if (instance_data->use_debug_agent())
+		  EnableDebug(env);
 
-        if (more == false) {
-          v8_platform.PumpMessageLoop(isolate);
-          EmitBeforeExit(&env);
+	  {
+		  SealHandleScope seal(isolate);
+		  bool more;
+		  do {
+			  v8_platform.PumpMessageLoop(isolate);
+			  more = uv_run(env->event_loop(), UV_RUN_ONCE);
 
-          // Emit `beforeExit` if the loop became alive either after emitting
-          // event, or after running some callbacks.
-          more = uv_loop_alive(env.event_loop());
-          if (uv_run(env.event_loop(), UV_RUN_NOWAIT) != 0)
-            more = true;
-        }
-      } while (more == true);
-    }
+			  if (more == false) {
+				  v8_platform.PumpMessageLoop(isolate);
+				  EmitBeforeExit(env);
 
-    env.set_trace_sync_io(false);
-
-    int exit_code = EmitExit(&env);
-    if (instance_data->is_main())
-      instance_data->set_exit_code(exit_code);
-    RunAtExit(&env);
-
-    WaitForInspectorDisconnect(&env);
-#if defined(LEAK_SANITIZER)
-    __lsan_do_leak_check();
-#endif
+				  // Emit `beforeExit` if the loop became alive either after emitting
+				  // event, or after running some callbacks.
+				  more = uv_loop_alive(env->event_loop());
+				  if (uv_run(env->event_loop(), UV_RUN_NOWAIT) != 0)
+					  more = true;
+			  }
+		  } while (more == true);
+	  }
   }
-  ///it is here for allowing to run more scripts at one process - Letos;
-  debugger_running = false;
-
-  {
-    Mutex::ScopedLock scoped_lock(node_isolate_mutex);
-    if (node_isolate == isolate)
-      node_isolate = nullptr;
-  }
-
-  CHECK_NE(isolate, nullptr);
-  isolate->Dispose();
-  isolate = nullptr;
 }
+
+static void StopNodeInstance() {
+	//return;
+	if (!isolate)
+		return;
+	//auto isolate = isolate;
+	auto ctx = isolate->GetCurrentContext();
+	if (*ctx)
+		ctx->Exit();
+	auto instance_data = script_params->GetInstanceData();
+	Environment * env = env_wrapper->GetEnvironment();
+
+	////original code from node (was at StartNodeInstance)
+	env->set_trace_sync_io(false);
+
+	int exit_code = EmitExit(env);
+	//if (instance_data->is_main())
+	//	instance_data->set_exit_code(exit_code);
+	RunAtExit(env);
+
+	WaitForInspectorDisconnect(env);
+#if defined(LEAK_SANITIZER)
+	__lsan_do_leak_check();
+#endif
+	///it is here for allowing to run more scripts at one process - Letos;
+	debugger_running = false;
+
+	{
+		Mutex::ScopedLock scoped_lock(node_isolate_mutex);
+		if (node_isolate == isolate)
+			node_isolate = nullptr;
+	}
+	CHECK_NE(isolate, nullptr);
+	delete env_wrapper;
+	delete iso_data_wrapper;
+	delete script_params;
+	isolate->Dispose();
+	isolate = nullptr;
+	//end of original code
+}
+
 
 int Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
 	exit = func;
@@ -4558,6 +4640,7 @@ static bool scripts_running;
 
 NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func, void * eng)
 {
+	StopNodeInstance();
 	exit = func;
 	int exit_code = 0;
 
@@ -4588,6 +4671,11 @@ NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func
 	if (this_script_is_main)
 		scripts_running = false;
 	return exit_code;
+}
+
+NODE_EXTERN void StopScript()
+{
+	StopNodeInstance();
 }
 
 void Dispose()

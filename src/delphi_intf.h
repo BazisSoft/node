@@ -47,12 +47,13 @@ public:
 	virtual void APIENTRY AddArgAsBool(bool val);
 	virtual void APIENTRY AddArgAsString(char* val);
 	virtual void APIENTRY AddArgAsNumber(double val);
-	virtual void APIENTRY AddArgAsObject(void * obj);
+	virtual void APIENTRY AddArgAsObject(void * value, void * classtype);
 	virtual IValue * APIENTRY CallFunction();
 private:
 	v8::Isolate * iso = nullptr;
 	std::vector<v8::Local<v8::Value>> argv;
 	v8::Persistent<v8::Function> func;
+	std::vector<char> run_string_result;
 	IValue * returnVal = nullptr;
 };
 
@@ -107,6 +108,7 @@ public:
 	virtual bool APIENTRY ArgIsObject();
 	virtual bool APIENTRY ArgIsArray();
 	virtual bool APIENTRY ArgIsV8Function();
+	virtual bool APIENTRY ArgIsUndefined();
 
 	//get arg 
 	virtual double APIENTRY GetArgAsNumber();
@@ -137,10 +139,12 @@ public:
 	virtual void * APIENTRY GetEngine();
 	virtual void * APIENTRY GetDelphiObject();
 	virtual void * APIENTRY GetDelphiClasstype();
-	virtual int APIENTRY GetArgsCount();;
+	virtual int APIENTRY GetArgsCount();
 
-	virtual char * APIENTRY GetMethodName();;
+	virtual char * APIENTRY GetMethodName();
 
+	virtual void APIENTRY SetReturnValueUndefined();
+	virtual void APIENTRY SetReturnValueIFace(void * value);
 	virtual void APIENTRY SetReturnValueClass(void * value, void* dClasstype);
 	virtual void APIENTRY SetReturnValueInt(int val);
 	virtual void APIENTRY SetReturnValueBool(bool val);
@@ -169,6 +173,9 @@ public:
 	virtual char * APIENTRY GetPropName();
 	virtual int APIENTRY GetPropIndex();
 
+	virtual void APIENTRY SetGetterResultUndefined();
+	virtual void APIENTRY SetGetterResultIFace(void * value);
+	virtual void APIENTRY SetGetterResultAsInterfaceFunction(void * intf, char * funcName);
 	virtual void APIENTRY SetGetterResultDObject(void * value, void* dClasstype);
 	virtual void APIENTRY SetGetterResultInt(int val);
 	virtual void APIENTRY SetGetterResultBool(bool val);
@@ -215,9 +222,32 @@ private:
 	IValue * setterVal = nullptr;
 };
 
+class IIntfSetterArgs : public IBazisIntf {
+public:
+	IIntfSetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, char * prop, v8::Local<v8::Value> newValue);
+	virtual void * APIENTRY GetEngine();
+	virtual void * APIENTRY GetDelphiObject();
+	virtual char * APIENTRY GetPropName();
+	virtual IValue * APIENTRY GetValue();
+
+	virtual void * APIENTRY GetValueAsDObject();
+	virtual int APIENTRY GetValueAsInt();
+	virtual bool APIENTRY GetValueAsBool();
+	virtual char * APIENTRY GetValueAsString();
+	virtual double APIENTRY GetValueAsDouble();
+private:
+	v8::Isolate * iso = nullptr;
+	std::string propName = "";
+	std::vector<char> run_string_result;
+	const v8::PropertyCallbackInfo<v8::Value> * IntfPropInfo = nullptr;
+	v8::Local<v8::Value> newVal;
+	IValue * setterVal = nullptr;
+};
+
 typedef void(APIENTRY *TMethodCallBack) (IMethodArgs * args);
 typedef void(APIENTRY *TGetterCallBack) (IGetterArgs * args);
 typedef void(APIENTRY *TSetterCallBack) (ISetterArgs * args);
+typedef void(APIENTRY *TIntfSetterCallBack) (IIntfSetterArgs * args);
 typedef void(APIENTRY *TErrorMsgCallBack) (const char * errMsg, void * DEngine);
 
 class IObjectProp : public IBazisIntf {
@@ -225,11 +255,12 @@ public:
 	virtual void APIENTRY SetRead(bool Aread);;
 	virtual void APIENTRY SetWrite(bool Awrite);
 	virtual void APIENTRY setName(char * Aname);
-	IObjectProp(std::string pName, bool pRead = true, bool Pwrite = true);
+	IObjectProp(std::string pName, void * pObj, bool pRead = true, bool Pwrite = true);
 	IObjectProp();
 	std::string name = "";
 	bool read = true;
 	bool write = true;
+	void * obj;
 };
 
 class IObjectMethod : public IBazisIntf {
@@ -238,23 +269,32 @@ public:
 	void * call = nullptr;
 };
 
+class IDelphiEnumValue {
+public:
+	std::string name = "";
+	int value = -1;
+	IDelphiEnumValue(char * _name, int _value) { name = _name; value = _value; };
+};
+
 class IObjectTemplate : public IBazisIntf {
 public:
+	IObjectTemplate(std::string objclasstype, v8::Isolate * isolate);
+
 	virtual void APIENTRY SetMethod(char * methodName, void * methodCall);
-	virtual void APIENTRY SetProp(char* propName, bool read, bool write);
+	////maybe there isn't needed propObj
+	virtual void APIENTRY SetProp(char* propName, void * propObj, bool read, bool write);
 	virtual void APIENTRY SetField(char* fieldName);
+	virtual void APIENTRY SetEnumField(char * valuename, int value);
 	virtual void APIENTRY SetHasIndexedProps(bool hasIndProps);
-	virtual void APIENTRY SetClasstype(char* classtype);
-	virtual char * APIENTRY GetClasstype();
 	virtual void APIENTRY SetParent(IObjectTemplate * parent);
 
-	std::string classtype;
 	void * DClass = nullptr;
 	v8::Local<v8::FunctionTemplate> objTempl;
-	IObjectTemplate(std::string objclasstype, v8::Isolate * isolate);
 	std::vector<std::unique_ptr<IObjectProp>> props;
 	std::vector<std::string> fields;
 	std::vector<std::unique_ptr<IObjectMethod>> methods;
+	std::vector<std::unique_ptr<IDelphiEnumValue>> enums;
+
 	bool HasIndexedProps = false;
 	int FieldCount = 0;
 protected:
@@ -278,14 +318,17 @@ public:
 	virtual IObjectTemplate * APIENTRY AddGlobal(void * dClass, void * object);
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);
+	virtual bool APIENTRY ClassIsRegistered(void * dClass);
 	virtual char * APIENTRY RunString(char * code, char * exeName);
 	virtual char * APIENTRY RunFile(char * fName, char * exeName);
 	virtual char * APIENTRY RunIncludeFile(char * fName);
+	virtual void APIENTRY AddIncludeCode(char * code);
 	virtual IValue * APIENTRY CallFunc(char * funcName, IValueArray * args);
 	virtual void APIENTRY SetDebug(bool debug);
 	bool DebugMode();
 	virtual int APIENTRY ErrorCode();
 	void SetErrorCode(int code);
+	void ExecIncludeCode(v8::Local<v8::Context> context);
 	virtual void APIENTRY SetMethodCallBack(TMethodCallBack callBack);
 	virtual void APIENTRY SetPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetPropSetterCallBack(TSetterCallBack callBack);
@@ -293,12 +336,18 @@ public:
 	virtual void APIENTRY SetFieldSetterCallBack(TSetterCallBack callBack);
 	virtual void APIENTRY SetIndexedPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetIndexedPropSetterCallBack(TSetterCallBack callBack);
+	virtual void APIENTRY SetInterfaceGetterPropCallBack(TGetterCallBack callBack);
+	virtual void APIENTRY SetInterfaceSetterPropCallBack(TIntfSetterCallBack callBack);
+	virtual void APIENTRY SetInterfaceMethodCallBack(TMethodCallBack callBack);
 	virtual void APIENTRY SetErrorMsgCallBack(TErrorMsgCallBack callback);
 
 	virtual IValueArray * APIENTRY NewArray(int count);
 	virtual IValue * APIENTRY NewInteger(int value);
+	virtual IValue * APIENTRY NewNumber(double value);
 	virtual IValue * APIENTRY NewString(char * value);
 	virtual IValue * APIENTRY NewBool(bool value);
+	virtual IValue * APIENTRY NewObject(void * value, void * classtype);
+
 
 	void * globObject = nullptr;
 	IObjectTemplate * globalTemplate = nullptr;
@@ -310,9 +359,15 @@ public:
 	void LogErrorMessage(const char * msg);
 
 	v8::Local<v8::ObjectTemplate> MakeGlobalTemplate(v8::Isolate * iso);
+	//will be initialized at MakeGlobalTemplate method.
+	v8::Local<v8::ObjectTemplate> ifaceTemplate;
+	
+	//callback for delphi's interface method (TODO:: It shouldn't be public)
+	static void InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 private:
 	std::vector<char> run_string_result;
+	std::string include_code;
 	std::vector<std::unique_ptr<IBazisIntf>> IValues;
 
 	TMethodCallBack methodCall;
@@ -322,6 +377,9 @@ private:
 	TSetterCallBack fieldSetterCall;
 	TGetterCallBack IndPropGetterCall;
 	TSetterCallBack IndPropSetterCall;
+	TGetterCallBack IFaceGetterPropCall;
+	TIntfSetterCallBack IFaceSetterPropCall;
+	TMethodCallBack IFaceMethodCall;
 	TErrorMsgCallBack ErrMsgCallBack;
 	bool debugMode = false;
 	int errCode = 0;
@@ -344,6 +402,12 @@ private:
 		const v8::PropertyCallbackInfo<v8::Value>& info);
 	static void Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
 		const v8::PropertyCallbackInfo<void>& info);
+
+	static void InterfaceGetter(v8::Local<v8::Name> property,
+		const v8::PropertyCallbackInfo<v8::Value>& info);
+	static void InterfaceSetter(v8::Local<v8::Name> property, v8::Local<v8::Value> value,
+		const v8::PropertyCallbackInfo<v8::Value>& info);
+
 	static void FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
 };
 
@@ -366,4 +430,5 @@ extern "C" {
 
 }
 }
+
 }

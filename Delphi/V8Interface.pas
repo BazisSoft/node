@@ -5,6 +5,7 @@ interface
 type
 
   IValue = class;
+  IEngine = class;
 
   IEngineIntf = class
     // do not call!
@@ -25,7 +26,7 @@ type
     procedure AddArg(val: boolean); overload; virtual; stdcall; abstract;
     procedure AddArg(val: PAnsiChar); overload; virtual; stdcall; abstract;
     procedure AddArg(val: double); overload; virtual; stdcall; abstract;
-    procedure AddArg(val: TObject); overload; virtual; stdcall; abstract;
+    procedure AddArg(val: Pointer; cType: Pointer); overload; virtual; stdcall; abstract;
     function CallFunction: IValue; virtual; stdcall; abstract;
   end;
 
@@ -57,6 +58,7 @@ type
     function IsObject: boolean; virtual; stdcall; abstract;
     function IsArray: boolean; virtual; stdcall; abstract;
     function IsV8Function: boolean; virtual; stdcall; abstract;
+    function IsUndefined: boolean; virtual; stdcall; abstract;
 
 
     function AsNumber: double; virtual; stdcall; abstract;
@@ -71,13 +73,15 @@ type
 
   IMethodArgs = class (IEngineIntf)
     function GetEngine: TObject; virtual; stdcall; abstract;
-    function GetDelphiObject: TObject; virtual; stdcall; abstract;
+    function GetDelphiObject: Pointer; virtual; stdcall; abstract;
     function GetDelphiClasstype: Pointer; virtual; stdcall; abstract;
     function GetArgsCount: integer; virtual; stdcall; abstract;
 
     function GetMethodName: PAnsiChar; virtual; stdcall; abstract;
 
-    procedure SetReturnValue(p: Pointer; dClasstype: Pointer); overload; virtual; stdcall; abstract;
+    procedure SetReturnValueUndefined; virtual; stdcall; abstract;
+    procedure SetReturnValueIntf(p: Pointer); virtual; stdcall; abstract;
+    procedure SetReturnValue(obj: Pointer; dClasstype: Pointer); overload; virtual; stdcall; abstract;
     procedure SetReturnValue(val: integer); overload; virtual; stdcall; abstract;
     procedure SetReturnValue(val: boolean); overload; virtual; stdcall; abstract;
     procedure SetReturnValue(val: PAnsiChar); overload; virtual; stdcall; abstract;
@@ -91,12 +95,15 @@ type
 
   IGetterArgs = class (IEngineIntf)
     function GetEngine: TObject; virtual; stdcall; abstract;
-    function GetDelphiObject: TObject; virtual; stdcall; abstract;
+    function GetDelphiObject: Pointer; virtual; stdcall; abstract;
     function GetDelphiClasstype: Pointer; virtual; stdcall; abstract;
     function GetPropName: PAnsiChar; virtual; stdcall; abstract;
     function GetPropIndex: integer; virtual; stdcall; abstract;
 
-    procedure SetGetterResult(p: Pointer; dClasstype: Pointer); overload; virtual; stdcall; abstract;
+    procedure SetGetterResultUndefined; virtual; stdcall; abstract;
+    procedure SetGetterResultIntf(p: Pointer); virtual; stdcall; abstract;
+    procedure SetGetterResultAsIntfFunction(intf: Pointer; funcName: PAnsiChar); virtual; stdcall; abstract;
+    procedure SetGetterResult(obj: Pointer; dClasstype: Pointer); overload; virtual; stdcall; abstract;
     procedure SetGetterResult(val: integer); overload; virtual; stdcall; abstract;
     procedure SetGetterResult(val: boolean); overload; virtual; stdcall; abstract;
     procedure SetGetterResult(val: PAnsiChar); overload; virtual; stdcall; abstract;
@@ -120,9 +127,23 @@ type
     function GetValueAsDouble: double; overload; virtual; stdcall; abstract;
   end;
 
+  IIntfSetterArgs = class (IEngineIntf)
+    function GetEngine: TObject; virtual; stdcall; abstract;
+    function GetDelphiObject: Pointer; virtual; stdcall; abstract;
+    function GetPropName: PAnsiChar; virtual; stdcall; abstract;
+    function GetValue: IValue; virtual; stdcall; abstract;
+
+    function GetValueAsObject: TObject; overload; virtual; stdcall; abstract;
+    function GetValueAsInt: integer; overload; virtual; stdcall; abstract;
+    function GetValueAsBool: boolean; overload; virtual; stdcall; abstract;
+    function GetValueAsString: PAnsiChar; overload; virtual; stdcall; abstract;
+    function GetValueAsDouble: double; overload; virtual; stdcall; abstract;
+  end;
+
   TMethodCallBack = procedure(args: IMethodArgs); stdcall;
   TGetterCallBack = procedure(args: IGetterArgs); stdcall;
   TSetterCallBack = procedure(args: ISetterArgs); stdcall;
+  TIntfSetterCallBack = procedure(args: IIntfSetterArgs); stdcall;
   TErrorMsgCallBack = procedure(errMsg: PAnsiChar; eng: TObject); stdcall;
 
   IObjectProp = class(IEngineIntf)
@@ -133,11 +154,10 @@ type
 
   IObjectTemplate = class (IEngineIntf)
     procedure SetMethod(methodName: PAnsiChar; MethodCall: Pointer); virtual; stdcall; abstract;
-    procedure SetProp(propName: PAnsiChar; read, write: boolean); virtual; stdcall; abstract;
+    procedure SetProp(propName: PAnsiChar; propObj: Pointer; read, write: boolean); virtual; stdcall; abstract;
     procedure SetField(fieldNAme: PAnsiChar); virtual; stdcall; abstract;
+    procedure SetEnumField(fieldName: PAnsiChar; fieldValue: Integer); virtual; stdcall; abstract;
     procedure SetHasIndexedProps(HAsIndexedProps: boolean); virtual; stdcall; abstract;
-    procedure SetClasstype(classtype: PAnsiChar); virtual; stdcall; abstract;
-    function GetClasstype: PAnsiChar; virtual; stdcall; abstract;
     procedure SetParent(parent: IObjectTemplate);  virtual; stdcall; abstract;
   end;
 
@@ -145,9 +165,11 @@ type
     function AddGlobal(dClass: Pointer; dObject: TObject): IObjectTemplate; virtual; stdcall; abstract;
     function AddObject(classtype: PAnsiChar; dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function GetObject(dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
+    function ClassIsRegistered(dClass: Pointer): boolean; virtual; stdcall; abstract;
     function RunString(code, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunFile(fileName, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunIncludeFile(fileName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
+    procedure AddIncludeCode(code: PAnsiChar); virtual; stdcall; abstract;
     function CallFunc(FuncName: PAnsiChar; args: IValuesArray): IValue; virtual; stdcall; abstract;
     procedure SetDebug(debug: boolean); virtual; stdcall; abstract;
     function ErrorCode: integer; virtual; stdcall; abstract;
@@ -158,12 +180,17 @@ type
     procedure SetFieldSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
+    procedure SetInterfaceGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
+    procedure SetInterfaceSetterCallBack(callBack: TIntfSetterCallBack); virtual; stdcall; abstract;
+    procedure SetInterfaceMethodCallBack(callBack: TMethodCallBack); virtual; stdcall; abstract;
     procedure SetErrorMessageCallBack(callBack: TErrorMsgCallBack); virtual; stdcall; abstract;
 
     function NewArray(count: integer): IValuesArray; virtual; stdcall; abstract;
     function NewValue(val: integer): IValue; overload; virtual; stdcall; abstract;
+    function NewValue(val: double): IValue; overload; virtual; stdcall; abstract;
     function NewValue(val: PAnsiChar): IValue; overload; virtual; stdcall; abstract;
     function NewValue(val: boolean): IValue; overload; virtual; stdcall; abstract;
+    function NewValue(obj: Pointer; dClasstype: Pointer): IValue; overload; virtual; stdcall; abstract;
 
   end;
 
