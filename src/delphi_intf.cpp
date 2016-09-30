@@ -1068,7 +1068,6 @@ void IGetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
 		auto obj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx).ToLocalChecked();
-		auto obj = maybeObj.ToLocalChecked();
 		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
 		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
 		propinfo->GetReturnValue().Set(obj);
