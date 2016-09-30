@@ -451,12 +451,16 @@ IEngine::IEngine(void * DEngine)
 
 IEngine::~IEngine()
 {
+	if (isolate)
+		isolate->SetData(EngineSlot, nullptr);
 	node::StopScript();
 }
 
 void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->IndPropGetterCall) {
 		auto getterArgs = new IGetterArgs(info, index);
 		engine->IndPropGetterCall(getterArgs);
@@ -466,6 +470,8 @@ void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackIn
 void IEngine::IndexedPropSetter(unsigned int index, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->IndPropSetterCall) {
 		auto setterArgs = new ISetterArgs(info, index, value);
 		engine->IndPropSetterCall(setterArgs);
@@ -475,6 +481,8 @@ void IEngine::IndexedPropSetter(unsigned int index, v8::Local<v8::Value> value, 
 void IEngine::FieldGetter(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->fieldGetterCall) {
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
@@ -485,6 +493,8 @@ void IEngine::FieldGetter(v8::Local<v8::String> property, const v8::PropertyCall
 void IEngine::FieldSetter(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->fieldSetterCall) {
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new ISetterArgs(info, *str, value);
@@ -495,6 +505,8 @@ void IEngine::FieldSetter(v8::Local<v8::String> property, v8::Local<v8::Value> v
 void IEngine::Getter(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->getterCall) {
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
@@ -505,6 +517,8 @@ void IEngine::Getter(v8::Local<v8::String> property, const v8::PropertyCallbackI
 void IEngine::Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->setterCall) {
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new ISetterArgs(info, *str, value);
@@ -514,10 +528,9 @@ void IEngine::Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
 
 void IEngine::InterfaceGetter(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-	////debugging code
-	v8::String::Utf8Value str(property);
-	////
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->IFaceGetterPropCall) {
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
@@ -528,6 +541,8 @@ void IEngine::InterfaceGetter(v8::Local<v8::Name> property, const v8::PropertyCa
 void IEngine::InterfaceSetter(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
 	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->IFaceSetterPropCall) {
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new IIntfSetterArgs(info, *str, value);
@@ -538,6 +553,8 @@ void IEngine::InterfaceSetter(v8::Local<v8::Name> property, v8::Local<v8::Value>
 void IEngine::InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
 	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->IFaceMethodCall) {
 		auto methodArgs = new IMethodArgs(args);
 		engine->IFaceMethodCall(methodArgs);
@@ -547,6 +564,8 @@ void IEngine::InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& a
 void IEngine::FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
 	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	if (!engine)
+		return;
 	if (engine->methodCall) {
 		auto methodArgs = new IMethodArgs(args);
 		engine->methodCall(methodArgs);
@@ -720,6 +739,8 @@ IValue::IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index)
 void * IMethodArgs::GetDelphiObject()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!eng)
+		return nullptr;
 	auto data = args->Data();
 	if (data->IsArray()) {
 		auto val = data.As<v8::Array>()->Get(iso->GetCurrentContext(), 0).ToLocalChecked();
@@ -734,6 +755,8 @@ void * IMethodArgs::GetDelphiObject()
 void * IMethodArgs::GetDelphiClasstype()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!eng)
+		return nullptr;
 	auto holder = args->Holder();
 	return eng->GetDelphiClasstype(holder);
 }
@@ -857,6 +880,8 @@ void * IMethodArgs::GetDelphiMethod()
 void * IMethodArgs::GetEngine()
 {
 	IEngine * engine = static_cast<IEngine*>(args->GetIsolate()->GetData(EngineSlot));
+	if (!engine)
+		return nullptr;
 	return engine->DEngine;
 }
 
@@ -977,6 +1002,8 @@ IGetterArgs::IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int in
 void * IGetterArgs::GetDelphiObject()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!eng)
+		return nullptr;
 	auto holder = propinfo->Holder();
 	return eng->GetDelphiObject(holder);
 }
@@ -984,6 +1011,8 @@ void * IGetterArgs::GetDelphiObject()
 void * IGetterArgs::GetDelphiClasstype()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!eng)
+		return nullptr;
 	auto holder = propinfo->Holder();
 	return eng->GetDelphiClasstype(holder);
 }
@@ -1083,6 +1112,8 @@ IRecord * IGetterArgs::GetGetterResultAsRecord()
 void * IGetterArgs::GetEngine()
 {
 	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	if (!engine)
+		return nullptr;
 	return engine->DEngine;
 }
 
@@ -1109,12 +1140,16 @@ ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int in
 void * ISetterArgs::GetEngine()
 {
 	IEngine * engine = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!engine)
+		return nullptr;
 	return engine->DEngine;
 }
 
 void * ISetterArgs::GetDelphiObject()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!eng)
+		return nullptr;
 	v8::Local<v8::Object> holder;
 	if (IsIndexedProp) {
 		holder = indexedPropInfo->Holder();
@@ -1128,6 +1163,8 @@ void * ISetterArgs::GetDelphiObject()
 void * ISetterArgs::GetDelphiClasstype()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!eng)
+		return nullptr;
 	v8::Local<v8::Object> holder;
 	if (IsIndexedProp) {
 		holder = indexedPropInfo->Holder();
@@ -1359,12 +1396,16 @@ IIntfSetterArgs::IIntfSetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info
 void * IIntfSetterArgs::GetEngine()
 {
 	IEngine * engine = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!engine)
+		return nullptr;
 	return engine->DEngine;
 }
 
 void * IIntfSetterArgs::GetDelphiObject()
 {
 	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	if (!eng)
+		return nullptr;
 	v8::Local<v8::Object> holder;
 	holder = IntfPropInfo->Holder();
 	return eng->GetDelphiObject(holder);
