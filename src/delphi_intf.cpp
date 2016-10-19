@@ -464,6 +464,8 @@ void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackIn
 	if (engine->IndPropGetterCall) {
 		auto getterArgs = new IGetterArgs(info, index);
 		engine->IndPropGetterCall(getterArgs);
+		if (getterArgs->error != "")
+			engine->Throw_Exception(getterArgs->error.c_str());
 	}
 }
 
@@ -475,6 +477,8 @@ void IEngine::IndexedPropSetter(unsigned int index, v8::Local<v8::Value> value, 
 	if (engine->IndPropSetterCall) {
 		auto setterArgs = new ISetterArgs(info, index, value);
 		engine->IndPropSetterCall(setterArgs);
+		if (setterArgs->error != "")
+			engine->Throw_Exception(setterArgs->error.c_str());
 	}
 }
 
@@ -487,6 +491,8 @@ void IEngine::FieldGetter(v8::Local<v8::String> property, const v8::PropertyCall
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
 		engine->fieldGetterCall(getterArgs);
+		if (getterArgs->error != "")
+			engine->Throw_Exception(getterArgs->error.c_str());
 	}
 }
 
@@ -499,6 +505,8 @@ void IEngine::FieldSetter(v8::Local<v8::String> property, v8::Local<v8::Value> v
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new ISetterArgs(info, *str, value);
 		engine->fieldSetterCall(setterArgs);
+		if (setterArgs->error != "")
+			engine->Throw_Exception(setterArgs->error.c_str());
 	}
 }
 
@@ -511,6 +519,8 @@ void IEngine::Getter(v8::Local<v8::String> property, const v8::PropertyCallbackI
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
 		engine->getterCall(getterArgs);
+		if (getterArgs->error != "")
+			engine->Throw_Exception(getterArgs->error.c_str());
 	}
 }
 
@@ -523,6 +533,8 @@ void IEngine::Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new ISetterArgs(info, *str, value);
 		engine->setterCall(setterArgs);
+		if (setterArgs->error != "")
+			engine->Throw_Exception(setterArgs->error.c_str());
 	}
 }
 
@@ -535,6 +547,8 @@ void IEngine::InterfaceGetter(v8::Local<v8::Name> property, const v8::PropertyCa
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
 		engine->IFaceGetterPropCall(getterArgs);
+		if (getterArgs->error != "")
+			engine->Throw_Exception(getterArgs->error.c_str());
 	}
 }
 
@@ -547,6 +561,8 @@ void IEngine::InterfaceSetter(v8::Local<v8::Name> property, v8::Local<v8::Value>
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new IIntfSetterArgs(info, *str, value);
 		engine->IFaceSetterPropCall(setterArgs);
+		if (setterArgs->error != "")
+			engine->Throw_Exception(setterArgs->error.c_str());
 	}
 }
 
@@ -558,6 +574,8 @@ void IEngine::InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& a
 	if (engine->IFaceMethodCall) {
 		auto methodArgs = new IMethodArgs(args);
 		engine->IFaceMethodCall(methodArgs);
+		if (methodArgs->error != "")
+			engine->Throw_Exception(methodArgs->error.c_str());
 	}
 }
 
@@ -569,7 +587,15 @@ void IEngine::FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 	if (engine->methodCall) {
 		auto methodArgs = new IMethodArgs(args);
 		engine->methodCall(methodArgs);
+		if (methodArgs->error != "")
+			engine->Throw_Exception(methodArgs->error.c_str());
 	}
+}
+
+void IEngine::Throw_Exception(const char * error_msg)
+{
+	auto iso = v8::Isolate::GetCurrent();
+	iso->ThrowException(v8::String::NewFromUtf8(iso, error_msg));
 }
 
 inline void IObjectTemplate::SetMethod(char * methodName, void * methodCall) {
@@ -877,6 +903,11 @@ void * IMethodArgs::GetDelphiMethod()
 	return nullptr;
 }
 
+void IMethodArgs::SetError(char * errorMsg)
+{
+	error = errorMsg;
+}
+
 void * IMethodArgs::GetEngine()
 {
 	IEngine * engine = static_cast<IEngine*>(args->GetIsolate()->GetData(EngineSlot));
@@ -1108,6 +1139,11 @@ IRecord * IGetterArgs::GetGetterResultAsRecord()
 	return recVal;
 }
 
+void IGetterArgs::SetError(char * errorMsg)
+{
+	error = errorMsg;
+}
+
 void * IGetterArgs::GetEngine()
 {
 	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
@@ -1230,6 +1266,11 @@ char * ISetterArgs::GetValueAsString()
 double ISetterArgs::GetValueAsDouble()
 {
 	return newVal->NumberValue(iso->GetCurrentContext()).FromMaybe(0.0);
+}
+
+void ISetterArgs::SetError(char * errorMsg)
+{
+	error = errorMsg;
 }
 
 IRecord::IRecord(v8::Isolate * isolate)
@@ -1461,6 +1502,11 @@ char * IIntfSetterArgs::GetValueAsString()
 double IIntfSetterArgs::GetValueAsDouble()
 {
 	return newVal->NumberValue(iso->GetCurrentContext()).FromMaybe(0.0);
+}
+
+void IIntfSetterArgs::SetError(char * errorMsg)
+{
+	error = errorMsg;
 }
 
 }

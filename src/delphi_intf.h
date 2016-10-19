@@ -155,6 +155,9 @@ public:
 
 	virtual IValue * APIENTRY GetArg(int index);
 	virtual void * APIENTRY GetDelphiMethod();
+
+	virtual void APIENTRY SetError(char * errorMsg);
+	std::string error = "";
 private:
 	v8::Isolate * iso = nullptr;
 	IRecord * recVal = nullptr;
@@ -184,6 +187,8 @@ public:
 	virtual void APIENTRY SetGetterResultAsRecord();
 	virtual IRecord * APIENTRY GetGetterResultAsRecord();
 
+	virtual void APIENTRY SetError(char * errorMsg);
+	std::string error = "";
 private:
 	v8::Isolate * iso = nullptr;
 	IRecord * recVal = nullptr;
@@ -210,6 +215,9 @@ public:
 	virtual bool APIENTRY GetValueAsBool();
 	virtual char * APIENTRY GetValueAsString();
 	virtual double APIENTRY GetValueAsDouble();
+
+	virtual void APIENTRY SetError(char * errorMsg);
+	std::string error = "";
 private:
 	v8::Isolate * iso = nullptr;
 	bool IsIndexedProp = false;
@@ -235,6 +243,9 @@ public:
 	virtual bool APIENTRY GetValueAsBool();
 	virtual char * APIENTRY GetValueAsString();
 	virtual double APIENTRY GetValueAsDouble();
+
+	virtual void APIENTRY SetError(char * errorMsg);
+	std::string error = "";
 private:
 	v8::Isolate * iso = nullptr;
 	std::string propName = "";
@@ -409,6 +420,8 @@ private:
 		const v8::PropertyCallbackInfo<v8::Value>& info);
 
 	static void FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
+
+	static void Throw_Exception(const char * error_msg);
 };
 
 //number of slot in isolate for engine;
