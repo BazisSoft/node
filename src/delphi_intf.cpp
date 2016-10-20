@@ -26,6 +26,25 @@ namespace Bazis {
 		}
 	}
 
+	IEngine * global_engine = nullptr;
+
+	BZINTF IEngine *BZDECL InitGlobalEngine(void * DEngine)
+	{
+		try {
+			if (!nodeInitialized) {
+				std::vector<char *> args;
+				args.push_back("");
+				node::InitIalize(1, args.data());
+				nodeInitialized = true;
+			}
+			global_engine = new IEngine(DEngine);
+			return global_engine;
+		}
+		catch (node::V8Exception &e) {
+			return nullptr;
+		}
+	}
+
 	BZINTF void BZDECL FinalizeNode()
 	{
 		if (nodeInitialized) {
@@ -147,7 +166,7 @@ inline char * IEngine::RunString(char * code, char * exeName) {
 	try {
 		int argc = 0;
 		auto argv = MakeArgs(code, false, argc, exeName);
-		node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+		node_engine->RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	}
 	catch (node::V8Exception &e) {
 		errCode = 1000;
@@ -163,7 +182,7 @@ char * IEngine::RunFile(char * fName, char * exeName)
 	try {
 		int argc = 0;
 		auto argv = MakeArgs(fName, true, argc, exeName);
-		node::RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
+		node_engine->RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	}
 	catch (node::V8Exception &e) {
 		errCode = 1000;
@@ -187,6 +206,25 @@ char * IEngine::RunIncludeFile(char * fName)
 	}
 
 	v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, fName, v8::NewStringType::kNormal).ToLocalChecked());
+	auto context = isolate->GetCurrentContext();
+	//for debug>>>>>>>>>
+	//<<<<<<<<<for debug
+	v8::Local<v8::Script> script;
+	if (v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
+		script->Run(context);
+	}
+
+	auto res = std::to_string(errCode);
+	run_string_result = std::vector<char>(res.c_str(), res.c_str() + res.length());
+	run_string_result.push_back(0);
+	return run_string_result.data();
+}
+
+char * IEngine::RunIncludeCode(char * code)
+{
+	v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, code, v8::NewStringType::kNormal).ToLocalChecked();
+
+	v8::ScriptOrigin origin(source);
 	auto context = isolate->GetCurrentContext();
 	//for debug>>>>>>>>>
 	//<<<<<<<<<for debug
@@ -311,53 +349,71 @@ void IEngine::SetErrorMsgCallBack(TErrorMsgCallBack callback)
 
 IValueArray * IEngine::NewArray(int count)
 {
-	auto result = std::make_unique<IValueArray>(isolate, count);
-	IValues.push_back(std::move(result));
-	return result.get();
+	if (isolate) {
+		auto result = std::make_unique<IValueArray>(isolate, count);
+		IValues.push_back(std::move(result));
+		return result.get();
+	}
+	return nullptr;
 }
 
 IValue * IEngine::NewInteger(int value)
 {
-	auto result = std::make_unique<IValue>(isolate, v8::Integer::New(isolate, value), -1);
-	IValues.push_back(std::move(result));
-	return result.get();
+	if (isolate) {
+		auto result = std::make_unique<IValue>(isolate, v8::Integer::New(isolate, value), -1);
+		IValues.push_back(std::move(result));
+		return result.get();
+	}
+	return nullptr;
 }
 
 IValue * IEngine::NewNumber(double value)
 {
-	auto result = std::make_unique<IValue>(isolate, v8::Number::New(isolate, value), -1);
-	IValues.push_back(std::move(result));
-	return result.get();
+	if (isolate) {
+		auto result = std::make_unique<IValue>(isolate, v8::Number::New(isolate, value), -1);
+		IValues.push_back(std::move(result));
+		return result.get();
+	}
+	return nullptr;
 }
 
 IValue * IEngine::NewString(char * value)
 {
-	auto result = std::make_unique<IValue>(isolate, v8::String::NewFromUtf8(isolate, value, v8::NewStringType::kNormal).ToLocalChecked(), -1);
-	IValues.push_back(std::move(result));
-	return result.get();
+	if (isolate) {
+		auto result = std::make_unique<IValue>(isolate, v8::String::NewFromUtf8(isolate, value, v8::NewStringType::kNormal).ToLocalChecked(), -1);
+		IValues.push_back(std::move(result));
+		return result.get();
+	}
+	return nullptr;
 }
 
 IValue * IEngine::NewBool(bool value)
 {
-	auto result = std::make_unique<IValue>(isolate, v8::Boolean::New(isolate, value), -1);
-	IValues.push_back(std::move(result));
-	return result.get();
+	if (isolate) {
+		auto result = std::make_unique<IValue>(isolate, v8::Boolean::New(isolate, value), -1);
+		IValues.push_back(std::move(result));
+		return result.get();
+	}
+	return nullptr;
 }
 
 IValue * IEngine::NewObject(void * value, void * classtype)
 {
-	IEngine * eng = static_cast<IEngine*>(isolate->GetData(EngineSlot));
-	IValue * result = nullptr;
-	auto dTempl = eng->GetObjectByClass(classtype);
-	if (dTempl) {
-		auto ctx = isolate->GetCurrentContext();
-		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
-		auto obj = maybeObj.ToLocalChecked();
-		obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
-		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
-		result = new IValue(isolate, obj, -1);
+	if (isolate) {
+		IEngine * eng = static_cast<IEngine*>(isolate->GetData(EngineSlot));
+		IValue * result = nullptr;
+		auto dTempl = eng->GetObjectByClass(classtype);
+		if (dTempl) {
+			auto ctx = isolate->GetCurrentContext();
+			auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+			auto obj = maybeObj.ToLocalChecked();
+			obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
+			obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
+			result = new IValue(isolate, obj, -1);
+		}
+		return result;
 	}
-	return result;
+	return nullptr;
 }
 
 
@@ -420,25 +476,25 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 	ifaceTemplate->SetHandler(conf);
 
 	v8::Local<v8::FunctionTemplate> global = v8::FunctionTemplate::New(isolate);
+	if (globalTemplate) {
+		for (auto &method : globalTemplate->methods) {
+			v8::Local<v8::FunctionTemplate> methodCallBack = v8::FunctionTemplate::New(isolate, FuncCallBack, v8::External::New(isolate, method->call));
+			global->PrototypeTemplate()->Set(
+				v8::String::NewFromUtf8(isolate, method->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+				methodCallBack);
+		}
 
-	for (auto &method : globalTemplate->methods) {
-		v8::Local<v8::FunctionTemplate> methodCallBack = v8::FunctionTemplate::New(isolate, FuncCallBack, v8::External::New(isolate, method->call));
-		global->PrototypeTemplate()->Set(
-			v8::String::NewFromUtf8(isolate, method->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
-			methodCallBack);
-	}
-
-	for (auto &prop : globalTemplate->props) {
-		global->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), Getter);
-	}
-	for (auto &enumField : globalTemplate->enums) {
-		global->PrototypeTemplate()->Set(isolate, enumField->name.c_str(), v8::Integer::New(isolate, enumField->value));
-	}
-
+		for (auto &prop : globalTemplate->props) {
+			global->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), Getter);
+		}
+		for (auto &enumField : globalTemplate->enums) {
+			global->PrototypeTemplate()->Set(isolate, enumField->name.c_str(), v8::Integer::New(isolate, enumField->value));
+		}
+		global->PrototypeTemplate()->SetInternalFieldCount(ObjectInternalFieldCount);
+	};
 	for (auto &obj : objects) {
 		auto V8Object = AddV8ObjectTemplate(obj.get());
 	}
-	global->PrototypeTemplate()->SetInternalFieldCount(ObjectInternalFieldCount);
 	return global->PrototypeTemplate();
 }
 
@@ -447,13 +503,14 @@ IEngine::IEngine(void * DEngine)
 	this->DEngine = DEngine;
 	ErrMsgCallBack = nullptr;
 	include_code = "";
+	node_engine = new node::NodeEngine();
 }
 
 IEngine::~IEngine()
 {
 	if (isolate)
 		isolate->SetData(EngineSlot, nullptr);
-	node::StopScript();
+	node_engine->StopScript();
 }
 
 void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackInfo<v8::Value>& info)

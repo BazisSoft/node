@@ -333,6 +333,7 @@ public:
 	virtual char * APIENTRY RunString(char * code, char * exeName);
 	virtual char * APIENTRY RunFile(char * fName, char * exeName);
 	virtual char * APIENTRY RunIncludeFile(char * fName);
+	virtual char * APIENTRY RunIncludeCode(char * code);
 	virtual void APIENTRY AddIncludeCode(char * code);
 	virtual IValue * APIENTRY CallFunc(char * funcName, IValueArray * args);
 	virtual void APIENTRY SetDebug(bool debug);
@@ -380,6 +381,7 @@ private:
 	std::vector<char> run_string_result;
 	std::string include_code;
 	std::vector<std::unique_ptr<IBazisIntf>> IValues;
+	node::NodeEngine * node_engine;
 
 	TMethodCallBack methodCall;
 	TGetterCallBack getterCall;
@@ -436,6 +438,8 @@ const int ObjectInternalFieldCount = 2;
 namespace Bazis {
 extern "C" {
 	BZINTF IEngine* BZDECL InitEngine(void * DEngine);
+
+	BZINTF IEngine* BZDECL InitGlobalEngine(void * DEngine);
 
 	BZINTF void BZDECL FinalizeNode();
 

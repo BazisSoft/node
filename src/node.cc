@@ -4398,15 +4398,20 @@ private:
 	IsolateData isolate_data;
 };
 
-
-Isolate * isolate = nullptr;
+//
+//Isolate * isolate = nullptr;
 ArrayBufferAllocator array_buffer_allocator;
-ScriptParams * script_params;
-EnvWrapeer * env_wrapper;
-IsolateDataWrapper * iso_data_wrapper;
+//ScriptParams * script_params;
+//EnvWrapeer * env_wrapper;
+//IsolateDataWrapper * iso_data_wrapper;
 ////
 
-static void StartNodeInstance(void* arg, void* eng) {
+NodeEngine::NodeEngine()
+{
+	isolate = nullptr;
+}
+
+void NodeEngine::StartNodeInstance(void* arg, void* eng) {
   using namespace Bv8;
   if (isolate) {
 	  throw V8Exception();
@@ -4436,9 +4441,11 @@ static void StartNodeInstance(void* arg, void* eng) {
 	  ////Locker locker(isolate);
 	  ////Isolate::Scope isolate_scope(isolate);
 	  ////HandleScope handle_scope(isolate);
-	  script_params = new ScriptParams(isolate);
-	  iso_data_wrapper = new IsolateDataWrapper(isolate, instance_data->event_loop(),
+	  auto script_params = new ScriptParams(isolate);
+	  script_params_ptr = script_params;
+	  auto iso_data_wrapper = new IsolateDataWrapper(isolate, instance_data->event_loop(),
 		  array_buffer_allocator.zero_fill_field());
+	  iso_data_wrapper_ptr = iso_data_wrapper;
 	  ////IsolateData isolate_data(isolate, instance_data->event_loop(),
    ////                            array_buffer_allocator.zero_fill_field());
 	  auto global = Local<ObjectTemplate>();
@@ -4452,9 +4459,11 @@ static void StartNodeInstance(void* arg, void* eng) {
 
 	  if (eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
-		  auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked(); \
+		  auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked();
+		  if (engine->globalTemplate) {
 			  globalObject->SetInternalField(0, v8::External::New(isolate, engine->globObject));
-		  globalObject->SetInternalField(1, v8::External::New(isolate, engine->globalTemplate->DClass));
+			  globalObject->SetInternalField(1, v8::External::New(isolate, engine->globalTemplate->DClass));
+		  }
 		  //globalObject->SetIntegrityLevel(context, v8::IntegrityLevel::kSealed);
 	  }
 
@@ -4465,7 +4474,8 @@ static void StartNodeInstance(void* arg, void* eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
 		  engine->ExecIncludeCode(context);
 	  }
-	  env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
+	  auto env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
+	  env_wrapper_ptr = env_wrapper;
 	  Environment *env = env_wrapper->GetEnvironment();
 	  env->Start(instance_data->argc(),
 		  instance_data->argv(),
@@ -4513,7 +4523,7 @@ static void StartNodeInstance(void* arg, void* eng) {
   }
 }
 
-static void StopNodeInstance() {
+void NodeEngine::StopNodeInstance() {
 	//return;
 	if (!isolate)
 		return;
@@ -4521,8 +4531,8 @@ static void StopNodeInstance() {
 	auto ctx = isolate->GetCurrentContext();
 	if (*ctx)
 		ctx->Exit();
-	auto instance_data = script_params->GetInstanceData();
-	Environment * env = env_wrapper->GetEnvironment();
+	auto instance_data = static_cast<ScriptParams *>(script_params_ptr)->GetInstanceData();
+	Environment * env = static_cast<EnvWrapeer *>(env_wrapper_ptr)->GetEnvironment();
 
 	////original code from node (was at StartNodeInstance)
 	env->set_trace_sync_io(false);
@@ -4545,16 +4555,15 @@ static void StopNodeInstance() {
 			node_isolate = nullptr;
 	}
 	CHECK_NE(isolate, nullptr);
-	delete env_wrapper;
-	delete iso_data_wrapper;
-	delete script_params;
+	delete env_wrapper_ptr;
+	delete iso_data_wrapper_ptr;
+	delete script_params_ptr;
 	isolate->Dispose();
 	isolate = nullptr;
 	//end of original code
 }
 
-
-int Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
+int NodeEngine::Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
 	exit = func;
   PlatformInit();
 
@@ -4638,7 +4647,7 @@ void InitIalize(int argc, char *argv[]) {
 
 static bool scripts_running;
 
-NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func, void * eng)
+NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<void(int)> func, void * eng)
 {
 	StopNodeInstance();
 	exit = func;
@@ -4673,12 +4682,12 @@ NODE_EXTERN int RunScript(int argc, char * argv[], std::function<void(int)> func
 	return exit_code;
 }
 
-NODE_EXTERN void StopScript()
+NODE_EXTERN void NodeEngine::StopScript()
 {
 	StopNodeInstance();
 }
 
-void Dispose()
+NODE_EXTERN void Dispose()
 {
 	V8::Dispose();
 
