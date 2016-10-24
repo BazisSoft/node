@@ -208,12 +208,15 @@ public:
 	void * iso_data_wrapper_ptr;
 	////
 	NodeEngine();
+	~NodeEngine();
 
 	NODE_EXTERN void StartNodeInstance(void* arg, void* eng);
 	NODE_EXTERN void StopNodeInstance();
 	NODE_EXTERN int Start(int argc, char **argv, std::function<void(int)> func, void *eng = nullptr);
 	NODE_EXTERN int RunScript(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
 	NODE_EXTERN void StopScript();
+private:
+	bool node_started;
 };
 
 class IsolateData;

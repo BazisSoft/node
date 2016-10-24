@@ -383,6 +383,9 @@ private:
 	std::vector<std::unique_ptr<IBazisIntf>> IValues;
 	node::NodeEngine * node_engine;
 
+	std::unique_ptr<IValueArray> run_result_array;
+	std::unique_ptr<IValue> run_result_value;
+
 	TMethodCallBack methodCall;
 	TGetterCallBack getterCall;
 	TSetterCallBack setterCall;

@@ -249,12 +249,24 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 {
 	auto context = isolate->GetCurrentContext();
 	auto glo = context->Global();
-	auto val = glo->Get(context, v8::String::NewFromUtf8(isolate, funcName, v8::NewStringType::kNormal).ToLocalChecked()).ToLocalChecked();
-	if (val->IsFunction()){
-		auto func = val.As<v8::Function>();
-		std::vector<v8::Local<v8::Value>> argv = args->GeV8ValueVector();
-		func_result = new IValue(isolate, func->Call(context, glo, argv.size(), argv.data()).ToLocalChecked(), -1);
-		return func_result;
+	auto maybe_val = glo->Get(context, v8::String::NewFromUtf8(isolate, funcName, v8::NewStringType::kNormal).ToLocalChecked());
+	if (!maybe_val.IsEmpty()) {
+		auto val = maybe_val.ToLocalChecked();
+		if (val->IsFunction()) {
+			try {
+				auto func = val.As<v8::Function>();
+				std::vector<v8::Local<v8::Value>> argv = args->GeV8ValueVector();
+				auto func_result = func->Call(context, glo, argv.size(), argv.data()).ToLocalChecked();
+				auto result_value = std::make_unique<IValue>(isolate, func_result, -1);
+				auto result = result_value.get();
+				IValues.push_back(std::move(result_value));
+				return result;
+			}
+			catch (node::V8Exception &e) {
+				return nullptr;
+			}
+				
+		}
 	}
 	return nullptr;
 }
@@ -350,9 +362,10 @@ void IEngine::SetErrorMsgCallBack(TErrorMsgCallBack callback)
 IValueArray * IEngine::NewArray(int count)
 {
 	if (isolate) {
-		auto result = std::make_unique<IValueArray>(isolate, count);
-		IValues.push_back(std::move(result));
-		return result.get();
+		run_result_array = std::make_unique<IValueArray>(isolate, count);
+		auto new_array = run_result_array.get();
+		IValues.push_back(std::move(run_result_array));
+		return new_array;
 	}
 	return nullptr;
 }
@@ -360,9 +373,10 @@ IValueArray * IEngine::NewArray(int count)
 IValue * IEngine::NewInteger(int value)
 {
 	if (isolate) {
-		auto result = std::make_unique<IValue>(isolate, v8::Integer::New(isolate, value), -1);
-		IValues.push_back(std::move(result));
-		return result.get();
+		run_result_value = std::make_unique<IValue>(isolate, v8::Integer::New(isolate, value), -1);
+		auto result = run_result_value.get();
+		IValues.push_back(std::move(run_result_value));
+		return result;
 	}
 	return nullptr;
 }
@@ -370,9 +384,10 @@ IValue * IEngine::NewInteger(int value)
 IValue * IEngine::NewNumber(double value)
 {
 	if (isolate) {
-		auto result = std::make_unique<IValue>(isolate, v8::Number::New(isolate, value), -1);
-		IValues.push_back(std::move(result));
-		return result.get();
+		run_result_value = std::make_unique<IValue>(isolate, v8::Number::New(isolate, value), -1);
+		auto result = run_result_value.get();
+		IValues.push_back(std::move(run_result_value));
+		return result;
 	}
 	return nullptr;
 }
@@ -380,9 +395,10 @@ IValue * IEngine::NewNumber(double value)
 IValue * IEngine::NewString(char * value)
 {
 	if (isolate) {
-		auto result = std::make_unique<IValue>(isolate, v8::String::NewFromUtf8(isolate, value, v8::NewStringType::kNormal).ToLocalChecked(), -1);
-		IValues.push_back(std::move(result));
-		return result.get();
+		run_result_value = std::make_unique<IValue>(isolate, v8::String::NewFromUtf8(isolate, value, v8::NewStringType::kNormal).ToLocalChecked(), -1);
+		auto result = run_result_value.get();
+		IValues.push_back(std::move(run_result_value));
+		return result;
 	}
 	return nullptr;
 }
@@ -390,9 +406,10 @@ IValue * IEngine::NewString(char * value)
 IValue * IEngine::NewBool(bool value)
 {
 	if (isolate) {
-		auto result = std::make_unique<IValue>(isolate, v8::Boolean::New(isolate, value), -1);
-		IValues.push_back(std::move(result));
-		return result.get();
+		run_result_value = std::make_unique<IValue>(isolate, v8::Boolean::New(isolate, value), -1);
+		auto result = run_result_value.get();
+		IValues.push_back(std::move(run_result_value));
+		return result;
 	}
 	return nullptr;
 }
@@ -409,7 +426,9 @@ IValue * IEngine::NewObject(void * value, void * classtype)
 			auto obj = maybeObj.ToLocalChecked();
 			obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
 			obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
-			result = new IValue(isolate, obj, -1);
+			run_result_value = std::make_unique<IValue>(isolate, obj, -1);
+			result = run_result_value.get();
+			IValues.push_back(std::move(run_result_value));
 		}
 		return result;
 	}
@@ -511,6 +530,7 @@ IEngine::~IEngine()
 	if (isolate)
 		isolate->SetData(EngineSlot, nullptr);
 	node_engine->StopScript();
+	delete node_engine;
 }
 
 void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackInfo<v8::Value>& info)
@@ -809,7 +829,8 @@ int IValue::GetIndex()
 
 v8::Local<v8::Value> IValue::GetV8Value()
 {
-	return v8Value.Get(isolate);
+	auto result = v8Value.Get(isolate);
+	return result;
 }
 
 IValue::IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index)
@@ -1029,7 +1050,9 @@ IValueArray::IValueArray(v8::Isolate * isolate , v8::Local<v8::Array> values_arr
 IValueArray::IValueArray(v8::Isolate * isolate, int count)
 {
 	length = count;
+	iso = isolate;
 	v8::Local<v8::Array> local_arr = v8::Array::New(isolate, count);
+	arr.Reset(iso, local_arr);
 }
 
 int IValueArray::GetCount()
@@ -1051,7 +1074,8 @@ IValue * IValueArray::GetValue(int index)
 
 void IValueArray::SetValue(IValue * value, int index)
 {
-	arr.Get(iso)->Set(iso->GetCurrentContext(), index, value->GetV8Value());
+	auto v8_array = arr.Get(iso);
+	v8_array->Set(iso->GetCurrentContext(), index, value->GetV8Value());
 }
 
 std::vector<v8::Local<v8::Value>> IValueArray::GeV8ValueVector()

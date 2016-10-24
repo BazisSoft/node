@@ -4408,23 +4408,38 @@ ArrayBufferAllocator array_buffer_allocator;
 
 NodeEngine::NodeEngine()
 {
+	node_started = false;
+	Isolate::CreateParams params;
+	/*ArrayBufferAllocator array_buffer_allocator;*/
+	params.array_buffer_allocator = &array_buffer_allocator;
+#ifdef NODE_ENABLE_VTUNE_PROFILING
+	params.code_event_handler = vTune::GetVtuneCodeEventHandler();
+#endif
+	///
+	/*Isolate**/ isolate = Isolate::New(params);
+}
+
+NodeEngine::~NodeEngine()
+{
+	CHECK_NE(isolate, nullptr);
+	isolate->Dispose();
 	isolate = nullptr;
 }
 
 void NodeEngine::StartNodeInstance(void* arg, void* eng) {
   using namespace Bv8;
-  if (isolate) {
-	  throw V8Exception();
-  }
+  //if (isolate) {
+	 // throw V8Exception();
+  //}
   NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
-  Isolate::CreateParams params;
-  /*ArrayBufferAllocator array_buffer_allocator;*/
-  params.array_buffer_allocator = &array_buffer_allocator;
-#ifdef NODE_ENABLE_VTUNE_PROFILING
-  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
-#endif
-  ///
-  /*Isolate**/ isolate = Isolate::New(params);
+//  Isolate::CreateParams params;
+//  /*ArrayBufferAllocator array_buffer_allocator;*/
+//  params.array_buffer_allocator = &array_buffer_allocator;
+//#ifdef NODE_ENABLE_VTUNE_PROFILING
+//  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
+//#endif
+//  ///
+//  /*Isolate**/ isolate = Isolate::New(params);
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
     if (instance_data->is_main()) {
@@ -4441,11 +4456,11 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 	  ////Locker locker(isolate);
 	  ////Isolate::Scope isolate_scope(isolate);
 	  ////HandleScope handle_scope(isolate);
-	  auto script_params = new ScriptParams(isolate);
-	  script_params_ptr = script_params;
-	  auto iso_data_wrapper = new IsolateDataWrapper(isolate, instance_data->event_loop(),
+	  script_params_ptr = new ScriptParams(isolate);
+	  auto script_params = static_cast<ScriptParams *>(script_params_ptr);
+	  iso_data_wrapper_ptr = new IsolateDataWrapper(isolate, instance_data->event_loop(),
 		  array_buffer_allocator.zero_fill_field());
-	  iso_data_wrapper_ptr = iso_data_wrapper;
+	  auto iso_data_wrapper = static_cast<IsolateDataWrapper *>(iso_data_wrapper_ptr);
 	  ////IsolateData isolate_data(isolate, instance_data->event_loop(),
    ////                            array_buffer_allocator.zero_fill_field());
 	  auto global = Local<ObjectTemplate>();
@@ -4474,14 +4489,16 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
 		  engine->ExecIncludeCode(context);
 	  }
-	  auto env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
-	  env_wrapper_ptr = env_wrapper;
+	  env_wrapper_ptr = new EnvWrapeer(iso_data_wrapper->GetData(), context);
+	  auto env_wrapper = static_cast<EnvWrapeer *>(env_wrapper_ptr);
 	  Environment *env = env_wrapper->GetEnvironment();
 	  env->Start(instance_data->argc(),
 		  instance_data->argv(),
 		  instance_data->exec_argc(),
 		  instance_data->exec_argv(),
 		  v8_is_profiling);
+
+	  node_started = true;
 
 	  isolate->SetAbortOnUncaughtExceptionCallback(
 		  ShouldAbortOnUncaughtException);
@@ -4525,7 +4542,7 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 
 void NodeEngine::StopNodeInstance() {
 	//return;
-	if (!isolate)
+	if (!node_started)
 		return;
 	//auto isolate = isolate;
 	auto ctx = isolate->GetCurrentContext();
@@ -4554,12 +4571,10 @@ void NodeEngine::StopNodeInstance() {
 		if (node_isolate == isolate)
 			node_isolate = nullptr;
 	}
-	CHECK_NE(isolate, nullptr);
 	delete env_wrapper_ptr;
 	delete iso_data_wrapper_ptr;
 	delete script_params_ptr;
-	isolate->Dispose();
-	isolate = nullptr;
+	node_started = false;
 	//end of original code
 }
 
@@ -4657,13 +4672,13 @@ NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<voi
 	const char** v8_argv;
 	NodeInstanceType instance_type;
 	bool this_script_is_main = false;
-	if (scripts_running)
-		instance_type = NodeInstanceType::WORKER;
-	else {
+	//if (scripts_running)
+		//instance_type = NodeInstanceType::WORKER;
+	//else {
 		instance_type = NodeInstanceType::MAIN;
-		scripts_running = true;
+		/*scripts_running = true;
 		this_script_is_main = true;
-	}
+	}*/
 	ParseArgs(&argc, const_cast<const char**>(argv), &exec_argc_, &exec_argv_, &v8_argc, &v8_argv);
 	{
 		NodeInstanceData instance_data(instance_type,
@@ -4674,11 +4689,11 @@ NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<voi
 			exec_argv_,
 			use_debug_agent);
 		StartNodeInstance(&instance_data, eng);
-		if (instance_type == NodeInstanceType::MAIN)
-			exit_code = instance_data.exit_code();
+		/*if (instance_type == NodeInstanceType::MAIN)
+			exit_code = instance_data.exit_code();*/
 	}
-	if (this_script_is_main)
-		scripts_running = false;
+	/*if (this_script_is_main)
+		scripts_running = false;*/
 	return exit_code;
 }
 
