@@ -154,6 +154,27 @@ begin
     FCallResult := FVal.Call(Params);
     Result := True;
   end;
+//  Result := False;
+//  FCallResult := nil;
+//  if Assigned(FVal) then
+//  begin
+//    //set params to func
+//    Func := FVal.Value.AsFunction;
+//    for k := 0 to High(Params) do
+//    begin
+//      if not Assigned(Params[k].TypeInfo) then
+//        continue;
+//      case Params[k].TypeInfo.Kind of
+//        tkInteger: Func.AddArg(Params[k].AsInteger);
+//        tkFloat: Func.AddArg(Params[k].AsExtended);
+//        tkString: Func.AddArg(PAnsiChar(UTF8String(Params[k].AsString)));
+//        tkClass: Func.AddArg(Params[k].AsObject);
+//        tkEnumeration: Func.AddArg(Params[k].AsBoolean);
+//      end;
+//    end;
+//    //call func
+//    FCallResult :=  Func.CallFunction;
+//  end;
 end;
 
 procedure TJSCallback.SetFunction(value: ICallableMethod);
@@ -238,19 +259,21 @@ end;
 
   function JsValToTValue(val: jsval): TValue;
   begin
+    if not Assigned(val) then
+      Exit(TValue.Empty);
     //checking for type
     if val.IsBool then
-      Result := TValue.FromVariant(val.AsBool)
+      Result := JSValToBoolean(val)
     else if val.IsInt then
-      Result := TValue.FromVariant(val.AsInt)
+      Result := JSValToInt(val)
     else if Val.IsNumber then
-      Result := TValue.FromVariant(val.AsNumber)
-    else if val.IsString then
-      Result := TValue.FromVariant(PUtf8CharToString(val.AsString))
+      Result := JSValToDouble(val)
     else if (val.IsObject) and (val.AsObject.IsDelphiObject) then
-      Result := TValue.From<TObject>(val.AsObject.GetDelphiObject)
+      Result := TValue.From<TObject>(JSValToObject(val).GetDelphiObject)
     else if val.IsArray then
-      Result := JSArrayToTValue(val.AsArray);
+      Result := JSArrayToTValue(val.AsArray)
+    else if val.IsString then
+      Result := JSValToString(val);
   end;
 
   function JSvalToRecordTValue(val: jsval; typ: TRttiType): TValue;
@@ -326,6 +349,7 @@ end;
   function JsValToTValue(val: jsval; typ: TRttiType): TValue; overload;
   var
     TypeKind: TypInfo.TTypeKind;
+    str1: RawByteString;
   begin
     Result := '';
     if not Assigned(typ) then
@@ -361,7 +385,11 @@ end;
       tkInt64: Result := JSValToInt(val);
       tkDynArray: ;
 
-      tkUString: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
+      tkUString:
+      begin
+        str1 := RawByteString(val.AsString);
+        Result := UTF8ToUnicodeString(str1);
+      end;
       tkClassRef: ;
       tkPointer: ;
       tkProcedure: ;
@@ -441,7 +469,7 @@ end;
       tkInteger: Result := Eng.NewValue(val.AsInteger);
       tkChar: ;
       tkEnumeration: ;
-//      tkFloat: Result := Eng.NewValue(val.AsExtended);
+      tkFloat: Result := Eng.NewValue(val.AsExtended);
       tkString: Result := Eng.NewValue(PAnsiChar(Utf8String(val.AsString)));
       tkSet: ;
       tkClass: ;
@@ -455,7 +483,7 @@ end;
       tkInterface: ;
       tkInt64: ;
       tkDynArray: ;
-      tkUString: ;
+      tkUString: Result := Eng.NewValue(PAnsiChar(Utf8String(val.AsString)));
       tkClassRef: ;
       tkPointer: ;
       tkProcedure: ;
@@ -465,9 +493,11 @@ end;
   function TValueToDispatch(val: TValue): IDispatch;
   var
     DispIntf: IDispatch;
+    intf: IInterface;
   begin
     Result := nil;
-    if val.AsInterface.QueryInterface(IDispatch, DispIntf) = S_OK then
+    intf := val.AsInterface;
+    if Assigned(intf) and (intf.QueryInterface(IDispatch, DispIntf) = S_OK) then
     begin
       Result := DispIntf;
     end
@@ -481,6 +511,7 @@ end;
     initValue: TValue;
     resValue: IValue;
   begin
+    result := False;
     count := Length(initArray);
     if count > resArray.GetCount then
       raise EScriptEngineException.Create('Result array count is less than init array count');
@@ -489,6 +520,7 @@ end;
       resValue := TValueToJSValue(initValue, Eng);
       resArray.SetValue(resValue, i);
     end;
+    Result := True;
   end;
 
   function PUtf8CharToString(s: PAnsiChar): string;

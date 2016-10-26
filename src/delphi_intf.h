@@ -427,6 +427,7 @@ private:
 	static void FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 	static void Throw_Exception(const char * error_msg);
+	static void MessageListener(v8::Local<v8::Message> message, v8::Local<v8::Value> error);
 };
 
 //number of slot in isolate for engine;

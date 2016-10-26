@@ -5,7 +5,7 @@ interface
 
 uses Classes, TypInfo, V8API, RTTI, types, Generics.Collections, SysUtils,
   Windows, syncObjs, IOUtils, Contnrs, ObjComAuto, ActiveX, Variants,
-  V8Interface, ScriptInterface;
+  V8Interface, ScriptInterface, VCl.Forms, Messages;
 
 const
   systemFieldName = 'system';
@@ -93,6 +93,8 @@ type
     FJSHelpers: TJSExtenderMap;
     FJSHelpersList: TObjectList;
     FScriptName: string;
+    //i think, it should using only for running script via PostMessage
+    FAppPath: string;
     FDebug: boolean;
     FIgnoredExceptions: TList<TClass>;
     FGlobalTemplate: IObjectTemplate;
@@ -120,11 +122,16 @@ type
     class procedure callIntfMethod(args: IMethodArgs); static; stdcall;
     class procedure SendErrToLog(errMsg: PAnsiChar; eng: TObject); static; stdcall;
     class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs): TRttiMethodInfo;
-    function CallFunction(name: string; Args: IValuesArray): IValue;
+    function CallFunction(name: string; Args: IValuesArray): IValue; overload;
+    function CallFunction(name: string; Args: array of TValue): IValue; overload;
+    function CallFunction(name: string; Args: array of Variant): Variant; overload;
 
     property ScriptLog: TStrings read FLog;
+    procedure SetLog(const Value: TStrings);
+
     property Debug: boolean read FDebug write SetDebug;
     function RunScript(code, appPath: string): string;
+//    function RunIncludeCode
     function RunFile(fileName, appPath: string): string;
     function RunIncludeFile(FileName: string): string;
     procedure AddIncludeCode(code: UTF8String);
@@ -179,7 +186,8 @@ end;
 
 procedure TJSSystemNamespace.log(const text: string);
 begin
-  FEngine.ScriptLog.Add(text);
+  if (Assigned(FEngine.ScriptLog)) then
+    FEngine.ScriptLog.Add(text);
 end;
 
 { TJSEngine }
@@ -197,6 +205,8 @@ begin
     JsClass := TJSClass.Create(cType);
     if FJSHelpers.TryGetValue(cType, helper) then
       JsClass.AddHelper(helper);
+    if FClasses.ContainsKey(ctype) then
+      raise EScriptEngineException.Create('Engine already have class being added');
     FClasses.Add(cType, JsClass);
     SetClassIntoContext(JsClass);
     FClassList.Add(JsClass);
@@ -220,12 +230,16 @@ begin
   begin
     i := 0;
     EnumName := '';
-    repeat
+    // TODO: find better way
+    while true do
+    begin
       EnumName := GetEnumName(typInfo, i);
-      global.SetEnumField(PAnsiChar(UTF8String(EnumName)), i);
       enumNum := GetEnumValue(typInfo, EnumName);
+      if enumNum <> i then
+        break;
+      global.SetEnumField(PAnsiChar(UTF8String(EnumName)), i);
       inc(i);
-    until enumNum <> (i - 1);
+    end;
     FEnumList.Add(typInfo);
   end;
 end;
@@ -362,7 +376,20 @@ begin
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
-    Result := Field.GetValue(obj);
+    try
+      Result := Field.GetValue(obj);
+    except
+      on E: EVariantTypeCastError do
+      begin
+        args.SetGetterResultUndefined;
+        Exit;
+      end;
+      on E: Exception do
+      begin
+        args.SetError(PAnsiChar(UTF8String(e.ClassName + ': ' + E.Message)));
+        Exit;
+      end;
+    end;
     if Assigned(Field.FieldType) then
     begin
       ReturnType :=  Field.FieldType.TypeKind;
@@ -398,10 +425,13 @@ begin
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -428,16 +458,59 @@ begin
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
-    Field.SetValue(obj, JsValToTValue(args.GetValue, Field.FieldType));
+    try
+      Field.SetValue(obj, JsValToTValue(args.GetValue, Field.FieldType));
+    except
+      on E: EVariantTypeCastError do
+        Exit;
+      on E: Exception do
+      begin
+        args.SetError(PAnsiChar(UTF8String(e.ClassName + ': ' + E.Message)));
+        Exit;
+      end;
+    end;
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
+end;
+
+function TJSEngine.CallFunction(name: string; Args: array of Variant): Variant;
+var
+  JsArgs: IValuesArray;
+  count, i: integer;
+begin
+  count := Length(Args);
+  JsArgs := FEngine.NewArray(count);
+  if not Assigned(JsArgs) then
+    raise EScriptEngineException.Create('Can not create an array to make a function');
+  for i := 0 to count - 1 do
+  begin
+    JsArgs.SetValue(TValueToJSValue(TValue.FromVariant(Args[i]), FEngine), i);
+  end;
+  Result := JsValToTValue(CallFunction(name, JsArgs)).AsVariant;
+end;
+
+function TJSEngine.CallFunction(name: string; Args: array of TValue): IValue;
+var
+  JsArgs: IValuesArray;
+  count, i: integer;
+begin
+  count := Length(Args);
+  JsArgs := FEngine.NewArray(count);
+  for i := 0 to count - 1 do
+  begin
+    JsArgs.SetValue(TValueToJSValue(Args[i], FEngine), i);
+  end;
+  Result := CallFunction(name, JsArgs);
 end;
 
 function TJSEngine.CallFunction(name: string; Args: IValuesArray): IValue;
@@ -445,7 +518,21 @@ var
   Utf8Name: UTF8String;
 begin
   Utf8Name := UTF8String(name);
-  Result := FEngine.CallFunc(PAnsiChar(Utf8Name), Args);
+  try
+    Result := FEngine.CallFunc(PAnsiChar(Utf8Name), Args);
+  except
+    on E:Exception do
+    begin
+      if Assigned(FLog) then
+      begin
+        if FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          FLog.Add('--' + E.Message)
+        else
+          FLog.Add('Uncaught exception: ' + E.Message);
+      end;
+      Result := nil;
+    end;
+  end;
 end;
 
 class procedure TJSEngine.callIndexedPropGetter(args: IGetterArgs);
@@ -473,7 +560,20 @@ begin
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
-    Result := Prop.GetValue(obj, [args.GetPropIndex]);
+    try
+      Result := Prop.GetValue(obj, [args.GetPropIndex]);
+    except
+      on E: EVariantTypeCastError do
+      begin
+        args.SetGetterResultUndefined;
+        Exit;
+      end;
+      on E: Exception do
+      begin
+        args.SetError(PAnsiChar(UTF8String(e.ClassName + ': ' + E.Message)));
+        Exit;
+      end;
+    end;
     if Assigned(Prop.PropertyType) then
     begin
       ReturnType :=  Prop.PropertyType.TypeKind;
@@ -509,10 +609,13 @@ begin
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -547,14 +650,22 @@ begin
     except
       on E: EArgumentOutOfRangeException do
         Eng.FLog.Add('Argumrent out of range');
+      on E: Exception do
+      begin
+        args.SetError(PAnsiChar(UTF8String(e.ClassName + ': ' + E.Message)));
+        Exit;
+      end;
     end;
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -585,7 +696,20 @@ begin
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
     PropName := PUtf8CharToString(args.GetPropName);
-    Result := ExecuteOnDispatchMultiParamProp(Intf, PropName, Tvalue.Empty, isProperty);
+    try
+      Result := ExecuteOnDispatchMultiParamProp(Intf, PropName, Tvalue.Empty, isProperty);
+    except
+      on E: EVariantTypeCastError do
+      begin
+        args.SetGetterResultUndefined;
+        Exit;
+      end;
+      on E: Exception do
+      begin
+        args.SetError(PAnsiChar(UTF8String(e.ClassName + ': ' + E.Message)));
+        Exit;
+      end;
+    end;
     if isProperty then
     begin
       if Assigned(Result.TypeInfo) then
@@ -630,10 +754,13 @@ begin
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -718,10 +845,13 @@ begin
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -745,10 +875,13 @@ begin
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -820,7 +953,15 @@ begin
         Result := Prop.GetValue(obj);
     except
       on E: EVariantTypeCastError do
+      begin
         args.SetGetterResultUndefined;
+        Exit;
+      end;
+      on E: Exception do
+      begin
+        args.SetError(PAnsiChar(UTF8String(e.ClassName + ': ' + E.Message)));
+        Exit;
+      end;
     end;
     if Assigned(Prop.PropertyType) then
     begin
@@ -857,10 +998,13 @@ begin
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -999,10 +1143,13 @@ begin
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -1032,21 +1179,34 @@ begin
     else
       obj := args.GetDelphiObject;
     helper := ClassDescr.FProps.Items[string(args.GetPropName)].propObj;
-    if Assigned(Helper) then
-    begin
-      helper.Source := obj;
-      Prop.SetValue(helper, JsValToTValue(args.GetValue, Prop.PropertyType));
-      Helper.Source := nil;
-    end
-    else
-      Prop.SetValue(obj, JsValToTValue(args.GetValue, Prop.PropertyType));
+    try
+      if Assigned(Helper) then
+      begin
+        helper.Source := obj;
+        Prop.SetValue(helper, JsValToTValue(args.GetValue, Prop.PropertyType));
+        Helper.Source := nil;
+      end
+      else
+        Prop.SetValue(obj, JsValToTValue(args.GetValue, Prop.PropertyType));
+    except
+      on E: EVariantTypeCastError do
+        Exit;
+      on E: Exception do
+      begin
+        args.SetError(PAnsiChar(UTF8String(e.ClassName + ': ' + E.Message)));
+        Exit;
+      end;
+    end;
   except
     on E:Exception do
     begin
-      if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-        eng.FLog.Add('--' + E.Message)
-      else
-        eng.FLog.Add('Uncaught exception: ' + E.Message);
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
+          eng.FLog.Add('--' + E.Message)
+        else
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+      end;
     end;
   end;
 end;
@@ -1058,7 +1218,6 @@ end;
 
 constructor TJSEngine.Create;
 begin
-  FLog := TStringList.Create;
   FClasses := TClassMap.Create;
   FClassList := TObjectList.Create;
   FEngine := InitEngine(Self);
@@ -1088,7 +1247,6 @@ end;
 
 destructor TJSEngine.Destroy;
 begin
-  FLog.Free;
   FEnumList.Free;
   FClasses.Clear;
   FClasses.Free;
@@ -1175,9 +1333,11 @@ begin
   Result := '';
   RawByteStr := UTF8Encode(FScriptName);
   FEngine.SetDebug(Debug);
+  FAppPath := appPath;
   CharPtr := FEngine.RunFile(PansiChar(RawByteStr), PansiChar(UTF8String(appPath)));
   if Assigned(CharPtr) then
     Result := string(CharPtr);
+  Result := '';
 end;
 
 procedure TJSEngine.AddIncludeCode(code: UTF8String);
@@ -1202,20 +1362,24 @@ begin
     end;
   end;
   Utf8Str := UTF8String(ScriptFullPath);
-  CharPtr := FEngine.RunIncludeFile(PansiChar(Utf8Str));
-  if Assigned(CharPtr) then
-    Result := string(CharPtr);
+  try
+    CharPtr := FEngine.RunIncludeFile(PansiChar(Utf8Str));
+    if Assigned(CharPtr) then
+        Result := string(CharPtr);
+  except
+    on e: Exception do
+      Result := 'File couldn''t be included: internal node error';
+  end;
 end;
 
 function TJSEngine.RunScript(code, appPath: string): string;
 var
   codeStr: UTF8String;
-  appPathStr: UTF8String;
   CharPtr: PAnsiChar;
 begin
   Result := '';
   codeStr := UTF8String(code);
-  appPathStr := UTF8String(appPath);
+  FScriptName := appPath;
   FEngine.SetDebug(Debug);
   CharPtr := FEngine.RunString(PansiChar(codeStr), PansiChar(UTF8String(appPath)));
   if Assigned(CharPtr) then
@@ -1229,7 +1393,8 @@ begin
   if eng is TJSEngine then
   begin
     engine := eng as TJSEngine;
-    engine.ScriptLog.Add(UTF8ToUnicodeString(RawByteString(errMsg)));
+    if Assigned(engine.FLog) then
+      engine.FLog.Add(UTF8ToUnicodeString(RawByteString(errMsg)));
   end;
 end;
 
@@ -1349,6 +1514,11 @@ begin
   FDebug := Value;
   if Assigned(FEngine) then  
     FEngine.SetDebug(Value);
+end;
+
+procedure TJSEngine.SetLog(const Value: TStrings);
+begin
+  FLog := Value;
 end;
 
 procedure TJSEngine.SetRecordIntoContext(ValRecord: TValue; RecDescr: TRttiType;

@@ -249,6 +249,7 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 {
 	auto context = isolate->GetCurrentContext();
 	auto glo = context->Global();
+	v8::Locker locker(isolate);
 	auto maybe_val = glo->Get(context, v8::String::NewFromUtf8(isolate, funcName, v8::NewStringType::kNormal).ToLocalChecked());
 	if (!maybe_val.IsEmpty()) {
 		auto val = maybe_val.ToLocalChecked();
@@ -256,6 +257,11 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 			try {
 				auto func = val.As<v8::Function>();
 				std::vector<v8::Local<v8::Value>> argv = args->GeV8ValueVector();
+				for (auto i = argv.begin(); i != argv.end(); i++) {
+					v8::String::Utf8Value str(*i);
+					if (*str == "")
+						Throw_Exception("some message");
+				}
 				auto func_result = func->Call(context, glo, argv.size(), argv.data()).ToLocalChecked();
 				auto result_value = std::make_unique<IValue>(isolate, func_result, -1);
 				auto result = result_value.get();
@@ -485,7 +491,6 @@ void IEngine::LogErrorMessage(const char * msg)
 v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 {
 	isolate = iso;
-
 	////making iface template
 	ifaceTemplate = v8::ObjectTemplate::New(iso);
 	ifaceTemplate->SetInternalFieldCount(ObjectInternalFieldCount);
@@ -673,6 +678,15 @@ void IEngine::Throw_Exception(const char * error_msg)
 {
 	auto iso = v8::Isolate::GetCurrent();
 	iso->ThrowException(v8::String::NewFromUtf8(iso, error_msg));
+}
+
+void IEngine::MessageListener(v8::Local<v8::Message> message, v8::Local<v8::Value> error)
+{
+	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	if (!engine)
+		return;
+	v8::String::Utf8Value str(message->Get());
+	engine->LogErrorMessage(*str);
 }
 
 inline void IObjectTemplate::SetMethod(char * methodName, void * methodCall) {

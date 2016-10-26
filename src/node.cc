@@ -4363,6 +4363,11 @@ class ScriptParams {
 public:
 	ScriptParams(Isolate * iso) : locker(iso), isolate_scope(iso), h_scope(iso) {};
 	~ScriptParams() {
+		auto k = 0;
+		for (int i = 0; i < 4; i++) {
+			k++;
+		}
+		assert(k == 4);
 	};
 	void SetInstanceData(NodeInstanceData * data) {
 		instance_data = data;
@@ -4409,21 +4414,14 @@ ArrayBufferAllocator array_buffer_allocator;
 NodeEngine::NodeEngine()
 {
 	node_started = false;
-	Isolate::CreateParams params;
-	/*ArrayBufferAllocator array_buffer_allocator;*/
-	params.array_buffer_allocator = &array_buffer_allocator;
-#ifdef NODE_ENABLE_VTUNE_PROFILING
-	params.code_event_handler = vTune::GetVtuneCodeEventHandler();
-#endif
-	///
-	/*Isolate**/ isolate = Isolate::New(params);
 }
 
 NodeEngine::~NodeEngine()
 {
-	CHECK_NE(isolate, nullptr);
-	isolate->Dispose();
-	isolate = nullptr;
+	//isolate->TerminateExecution();
+	//it should be there, but now it throws an exception
+	//isolate->Dispose();
+	//isolate = nullptr;
 }
 
 void NodeEngine::StartNodeInstance(void* arg, void* eng) {
@@ -4432,14 +4430,14 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 	 // throw V8Exception();
   //}
   NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
-//  Isolate::CreateParams params;
-//  /*ArrayBufferAllocator array_buffer_allocator;*/
-//  params.array_buffer_allocator = &array_buffer_allocator;
-//#ifdef NODE_ENABLE_VTUNE_PROFILING
-//  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
-//#endif
-//  ///
-//  /*Isolate**/ isolate = Isolate::New(params);
+  Isolate::CreateParams params;
+  /*ArrayBufferAllocator array_buffer_allocator;*/
+  params.array_buffer_allocator = &array_buffer_allocator;
+#ifdef NODE_ENABLE_VTUNE_PROFILING
+  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
+#endif
+  ///
+  /*Isolate**/ isolate = Isolate::New(params);
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
     if (instance_data->is_main()) {
@@ -4452,15 +4450,15 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
     isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
   }
 
-  {
+  {	  
 	  ////Locker locker(isolate);
 	  ////Isolate::Scope isolate_scope(isolate);
 	  ////HandleScope handle_scope(isolate);
-	  script_params_ptr = new ScriptParams(isolate);
-	  auto script_params = static_cast<ScriptParams *>(script_params_ptr);
-	  iso_data_wrapper_ptr = new IsolateDataWrapper(isolate, instance_data->event_loop(),
+	  auto script_params = new ScriptParams(isolate);
+	  script_params_ptr = script_params;
+	  auto iso_data_wrapper = new IsolateDataWrapper(isolate, instance_data->event_loop(),
 		  array_buffer_allocator.zero_fill_field());
-	  auto iso_data_wrapper = static_cast<IsolateDataWrapper *>(iso_data_wrapper_ptr);
+	  iso_data_wrapper_ptr = iso_data_wrapper;
 	  ////IsolateData isolate_data(isolate, instance_data->event_loop(),
    ////                            array_buffer_allocator.zero_fill_field());
 	  auto global = Local<ObjectTemplate>();
@@ -4489,8 +4487,8 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
 		  engine->ExecIncludeCode(context);
 	  }
-	  env_wrapper_ptr = new EnvWrapeer(iso_data_wrapper->GetData(), context);
-	  auto env_wrapper = static_cast<EnvWrapeer *>(env_wrapper_ptr);
+	  auto env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
+	  env_wrapper_ptr = env_wrapper;
 	  Environment *env = env_wrapper->GetEnvironment();
 	  env->Start(instance_data->argc(),
 		  instance_data->argv(),
@@ -4571,11 +4569,11 @@ void NodeEngine::StopNodeInstance() {
 		if (node_isolate == isolate)
 			node_isolate = nullptr;
 	}
-	delete env_wrapper_ptr;
-	delete iso_data_wrapper_ptr;
-	delete script_params_ptr;
+	CHECK_NE(isolate, nullptr);
+	delete static_cast<EnvWrapeer *>(env_wrapper_ptr);
+	delete static_cast<IsolateDataWrapper *>(iso_data_wrapper_ptr);
+	delete static_cast<ScriptParams *>(script_params_ptr);
 	node_started = false;
-	//end of original code
 }
 
 int NodeEngine::Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
@@ -4609,7 +4607,7 @@ int NodeEngine::Start(int argc, char** argv, std::function<void(int)> func, void
 
   int exit_code = 1;
   {
-    NodeInstanceData instance_data(NodeInstanceType::MAIN,
+    NodeInstanceData instance_data(NodeInstanceType::WORKER,
                                    uv_default_loop(),
                                    argc,
                                    const_cast<const char**>(argv),
@@ -4619,9 +4617,6 @@ int NodeEngine::Start(int argc, char** argv, std::function<void(int)> func, void
     StartNodeInstance(&instance_data, eng);
     exit_code = instance_data.exit_code();
   }
-  V8::Dispose();
-
-  v8_platform.Dispose();
 
   delete[] exec_argv;
   exec_argv = nullptr;
@@ -4671,7 +4666,7 @@ NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<voi
 	int v8_argc;
 	const char** v8_argv;
 	NodeInstanceType instance_type;
-	bool this_script_is_main = false;
+	//bool this_script_is_main = false;
 	//if (scripts_running)
 		//instance_type = NodeInstanceType::WORKER;
 	//else {

@@ -104,6 +104,7 @@ type
     constructor Create(Eng: TJSEngine);
     destructor Destroy; override;
     procedure log(str: string);
+    procedure alert(str: string);
     property system: TJSSystemNamespace read GetSystem;
     [TGCAttr]
     function NewVectorList: TVectorList;
@@ -205,6 +206,11 @@ begin
 end;
 
 { TGlobalNamespace }
+
+procedure TGlobalNamespace.alert(str: string);
+begin
+  FEng.ScriptLog.Add('alert: ' + str);
+end;
 
 constructor TGlobalNamespace.Create(Eng: TJSEngine);
 begin

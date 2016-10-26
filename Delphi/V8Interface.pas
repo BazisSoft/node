@@ -91,6 +91,8 @@ type
 
     function GetArg(index: integer): IValue; virtual; stdcall; abstract;
     function GetDelphiMethod: TObject; virtual; stdcall; abstract;
+
+    procedure SetError(errorType: PAnsiChar); virtual; stdcall; abstract;
   end;
 
   IGetterArgs = class (IEngineIntf)
@@ -110,6 +112,8 @@ type
     procedure SetGetterResult(val: Double); overload; virtual; stdcall; abstract;
     procedure SetGetterResultAsRecord; virtual; stdcall; abstract;
     function GetGetterResultAsRecord: IRecord; virtual; stdcall; abstract;
+
+    procedure SetError(errorType: PAnsiChar); virtual; stdcall; abstract;
   end;
 
   ISetterArgs = class (IEngineIntf)
@@ -125,6 +129,8 @@ type
     function GetValueAsBool: boolean; overload; virtual; stdcall; abstract;
     function GetValueAsString: PAnsiChar; overload; virtual; stdcall; abstract;
     function GetValueAsDouble: double; overload; virtual; stdcall; abstract;
+
+    procedure SetError(errorType: PAnsiChar); virtual; stdcall; abstract;
   end;
 
   IIntfSetterArgs = class (IEngineIntf)
@@ -138,6 +144,8 @@ type
     function GetValueAsBool: boolean; overload; virtual; stdcall; abstract;
     function GetValueAsString: PAnsiChar; overload; virtual; stdcall; abstract;
     function GetValueAsDouble: double; overload; virtual; stdcall; abstract;
+
+    procedure SetError(errorType: PAnsiChar); virtual; stdcall; abstract;
   end;
 
   TMethodCallBack = procedure(args: IMethodArgs); stdcall;
@@ -169,6 +177,7 @@ type
     function RunString(code, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunFile(fileName, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunIncludeFile(fileName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
+    function RunIncludeCode(code: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     procedure AddIncludeCode(code: PAnsiChar); virtual; stdcall; abstract;
     function CallFunc(FuncName: PAnsiChar; args: IValuesArray): IValue; virtual; stdcall; abstract;
     procedure SetDebug(debug: boolean); virtual; stdcall; abstract;
@@ -194,11 +203,11 @@ type
 
   end;
 
-  function InitEngine(DEngine: TObject): IEngine cdecl; external 'node.dll';
+  function InitEngine(DEngine: TObject): IEngine cdecl; external 'node.dll' delayed;
 
-  procedure FinalizeNode(); cdecl; external 'node.dll';
+  procedure FinalizeNode(); cdecl; external 'node.dll' delayed;
 
-  procedure SetExeName(name: PAnsiChar); cdecl; external 'node.dll';
+  procedure SetExeName(name: PAnsiChar); cdecl; external 'node.dll' delayed;
 
 implementation
 

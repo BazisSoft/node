@@ -1,6 +1,6 @@
 program V8EngineProj;
 
-{.$APPTYPE CONSOLE}
+{$APPTYPE CONSOLE}
 
 {$R *.res}
 
@@ -18,20 +18,29 @@ uses
 
 var
   Global: TGlobalNamespace;
+  code: TStrings;
+  log: TStrings;
   Eng: TJSEngine;
+  s: string;
 begin
   Math.SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
     exUnderflow, exPrecision]);
   try
     Eng := TJSEngine.Create;
+    log := TStringList.Create;
     Eng.Debug := True;
+    Eng.SetLog(log);
     Global := TGlobalNamespace.Create(Eng);
+    code := TStringList.Create;
     try
       Eng.AddGlobal(Global);
-//      Eng.RunScript('a = 2; a++; system.log(a)', ParamStr(0));
-      Eng.RunFile('..\scripts\1.js', ParamStr(0));
+//      Eng.RunScript('a = 2;// a++; system.log(a)', ParamStr(0));
+      code.LoadFromFile('..\scripts\tools\codeassist.js');
+      eng.RunScript(code.Text, ExtractFilePath(ParamStr(0)) + '..\scripts\tools\codeassist.js');
+      s := eng.CallFunction('computeProposals', ['a = 2;', 0, 1]);
+      Eng.ScriptLog.Add(s);
       // <<----send log to user-----
-      if Eng.ScriptLog.Count > 0 then
+      if Assigned(Eng.ScriptLog) and (Eng.ScriptLog.Count > 0) then
       begin
         Writeln('=========================LOG=========================');
         Writeln(Eng.ScriptLog.Text);
@@ -41,11 +50,13 @@ begin
     finally
       Eng.Free;
       Global.Free;
+      log.Free;
     end;
   except
-//    writeln('err');
+    on e: Exception do
+      writeln('err');
   end;
-//  Writeln;
-//  Writeln('Press Enter for Exit');
-//  Readln;
+  Writeln;
+  Writeln('Press Enter for Exit');
+  Readln;
 end.
