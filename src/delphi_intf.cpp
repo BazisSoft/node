@@ -257,16 +257,21 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 			try {
 				auto func = val.As<v8::Function>();
 				std::vector<v8::Local<v8::Value>> argv = args->GeV8ValueVector();
+#ifdef DEBUG
 				for (auto i = argv.begin(); i != argv.end(); i++) {
 					v8::String::Utf8Value str(*i);
 					if (*str == "")
 						Throw_Exception("some message");
 				}
-				auto func_result = func->Call(context, glo, argv.size(), argv.data()).ToLocalChecked();
-				auto result_value = std::make_unique<IValue>(isolate, func_result, -1);
-				auto result = result_value.get();
-				IValues.push_back(std::move(result_value));
-				return result;
+#endif DEBUG;
+
+				auto func_result = func->Call(context, glo, argv.size(), argv.data());
+				if (!func_result.IsEmpty()) {
+					auto result_value = std::make_unique<IValue>(isolate, func_result.ToLocalChecked(), -1);
+					auto result = result_value.get();
+					IValues.push_back(std::move(result_value));
+					return result;
+				}
 			}
 			catch (node::V8Exception &e) {
 				return nullptr;
@@ -1089,6 +1094,9 @@ IValue * IValueArray::GetValue(int index)
 void IValueArray::SetValue(IValue * value, int index)
 {
 	auto v8_array = arr.Get(iso);
+#ifdef DEBUG
+	v8::String::Utf8Value str(value->GetV8Value());
+#endif // DEBUG
 	v8_array->Set(iso->GetCurrentContext(), index, value->GetV8Value());
 }
 

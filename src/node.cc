@@ -4666,14 +4666,13 @@ NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<voi
 	int v8_argc;
 	const char** v8_argv;
 	NodeInstanceType instance_type;
-	//bool this_script_is_main = false;
-	//if (scripts_running)
-		//instance_type = NodeInstanceType::WORKER;
-	//else {
+	Bv8::IEngine* engine = nullptr;
+	if (eng)
+		engine = static_cast<Bv8::IEngine*>(eng);
+	if (engine && engine->DebugMode())
 		instance_type = NodeInstanceType::MAIN;
-		/*scripts_running = true;
-		this_script_is_main = true;
-	}*/
+	else
+		instance_type = NodeInstanceType::WORKER;
 	ParseArgs(&argc, const_cast<const char**>(argv), &exec_argc_, &exec_argv_, &v8_argc, &v8_argv);
 	{
 		NodeInstanceData instance_data(instance_type,
@@ -4687,8 +4686,6 @@ NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<voi
 		/*if (instance_type == NodeInstanceType::MAIN)
 			exit_code = instance_data.exit_code();*/
 	}
-	/*if (this_script_is_main)
-		scripts_running = false;*/
 	return exit_code;
 }
 
