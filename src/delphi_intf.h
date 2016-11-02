@@ -330,7 +330,7 @@ public:
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);
 	virtual bool APIENTRY ClassIsRegistered(void * dClass);
-	virtual char * APIENTRY RunString(char * code, char * exeName);
+	virtual IValue * APIENTRY RunString(char * code, char * exeName);
 	virtual char * APIENTRY RunFile(char * fName, char * exeName);
 	virtual char * APIENTRY RunIncludeFile(char * fName);
 	virtual char * APIENTRY RunIncludeCode(char * code);
@@ -376,6 +376,7 @@ public:
 	
 	//callback for delphi's interface method (TODO:: It shouldn't be public)
 	static void InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
+	static IEngine * GetEngine(v8::Isolate * iso);
 
 private:
 	std::vector<char> run_string_result;

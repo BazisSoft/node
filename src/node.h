@@ -201,7 +201,6 @@ NODE_EXTERN void Init(int* argc,
 class NodeEngine {
 public:
 	////variables for keep script alive after running all code;
-	v8::Isolate * isolate;
 //	ArrayBufferAllocator array_buffer_allocator;
 	void * script_params_ptr;
 	void * env_wrapper_ptr;
@@ -209,6 +208,7 @@ public:
 	////
 	NodeEngine();
 	~NodeEngine();
+	v8::Isolate * node_engine_isolate;
 
 	NODE_EXTERN void StartNodeInstance(void* arg, void* eng);
 	NODE_EXTERN void StopNodeInstance();

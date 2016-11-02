@@ -162,19 +162,44 @@ static void log(const v8::FunctionCallbackInfo<v8::Value>& args) {
 	printf(strval.c_str());
 }
 
-inline char * IEngine::RunString(char * code, char * exeName) {
+inline IValue * IEngine::RunString(char * code, char * exeName) {
 	try {
 		int argc = 0;
 		auto argv = MakeArgs(code, false, argc, exeName);
+		//// На будущее - исправить код, чтобы работал без ошибок и без использования функций Node.js
+		//// Или найти вариант как достать возвращаемое значение скрипта
+		/*
+		if (!isolate)
+			isolate = node_engine->node_engine_isolate;
+		v8::Isolate::Scope scope(isolate);
+		auto source = v8::String::NewFromUtf8(isolate, code, v8::NewStringType::kNormal).ToLocalChecked();
+		v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, "", v8::NewStringType::kNormal).ToLocalChecked());
+		auto context = isolate->GetCurrentContext();
+		if (context.IsEmpty()) {
+			auto global = MakeGlobalTemplate(isolate);
+			context = v8::Context::New(isolate, NULL, global);
+		}
+		v8::Context::Scope ctx_scope(context);
+		v8::Local<v8::Script> script;
+		if (v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
+			auto retval = script->Run(context);
+			if (!retval.IsEmpty()) {
+				v8::String::Utf8Value str(retval.ToLocalChecked());
+				run_result_value = std::make_unique<IValue>(isolate, retval.ToLocalChecked(), -1);
+				return run_result_value.get();
+			}
+		}
+		////*/
 		node_engine->RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	}
 	catch (node::V8Exception &e) {
 		errCode = 1000;
-	}
+	}/*
 	auto res = std::to_string(errCode);
 	run_string_result = std::vector<char>(res.c_str(), res.c_str() + res.length());
 	run_string_result.push_back(0);
-	return run_string_result.data();
+	return run_string_result.data();*/
+	return nullptr;
 }
 
 char * IEngine::RunFile(char * fName, char * exeName)
@@ -247,6 +272,7 @@ void IEngine::AddIncludeCode(char * code)
 
 IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 {
+	v8::Isolate::Scope scope(isolate);
 	auto context = isolate->GetCurrentContext();
 	auto glo = context->Global();
 	v8::Locker locker(isolate);
@@ -373,6 +399,7 @@ void IEngine::SetErrorMsgCallBack(TErrorMsgCallBack callback)
 IValueArray * IEngine::NewArray(int count)
 {
 	if (isolate) {
+		v8::Isolate::Scope scope(isolate);
 		run_result_array = std::make_unique<IValueArray>(isolate, count);
 		auto new_array = run_result_array.get();
 		IValues.push_back(std::move(run_result_array));
@@ -384,6 +411,7 @@ IValueArray * IEngine::NewArray(int count)
 IValue * IEngine::NewInteger(int value)
 {
 	if (isolate) {
+		v8::Isolate::Scope scope(isolate);
 		run_result_value = std::make_unique<IValue>(isolate, v8::Integer::New(isolate, value), -1);
 		auto result = run_result_value.get();
 		IValues.push_back(std::move(run_result_value));
@@ -395,6 +423,7 @@ IValue * IEngine::NewInteger(int value)
 IValue * IEngine::NewNumber(double value)
 {
 	if (isolate) {
+		v8::Isolate::Scope scope(isolate);
 		run_result_value = std::make_unique<IValue>(isolate, v8::Number::New(isolate, value), -1);
 		auto result = run_result_value.get();
 		IValues.push_back(std::move(run_result_value));
@@ -406,6 +435,7 @@ IValue * IEngine::NewNumber(double value)
 IValue * IEngine::NewString(char * value)
 {
 	if (isolate) {
+		v8::Isolate::Scope scope(isolate);
 		run_result_value = std::make_unique<IValue>(isolate, v8::String::NewFromUtf8(isolate, value, v8::NewStringType::kNormal).ToLocalChecked(), -1);
 		auto result = run_result_value.get();
 		IValues.push_back(std::move(run_result_value));
@@ -417,6 +447,7 @@ IValue * IEngine::NewString(char * value)
 IValue * IEngine::NewBool(bool value)
 {
 	if (isolate) {
+		v8::Isolate::Scope scope(isolate);
 		run_result_value = std::make_unique<IValue>(isolate, v8::Boolean::New(isolate, value), -1);
 		auto result = run_result_value.get();
 		IValues.push_back(std::move(run_result_value));
@@ -428,7 +459,8 @@ IValue * IEngine::NewBool(bool value)
 IValue * IEngine::NewObject(void * value, void * classtype)
 {
 	if (isolate) {
-		IEngine * eng = static_cast<IEngine*>(isolate->GetData(EngineSlot));
+		v8::Isolate::Scope scope(isolate);
+		IEngine * eng = IEngine::GetEngine(isolate);
 		IValue * result = nullptr;
 		auto dTempl = eng->GetObjectByClass(classtype);
 		if (dTempl) {
@@ -463,6 +495,7 @@ void * IEngine::GetDelphiObject(v8::Local<v8::Object> holder)
 
 void * IEngine::GetDelphiClasstype(v8::Local<v8::Object> obj)
 {
+	v8::Isolate::Scope scope(isolate);
 	v8::String::Utf8Value objstring(obj->ToString());
 	v8::String::Utf8Value objDetString(obj->ToDetailString());
 	int count = obj->InternalFieldCount();
@@ -495,6 +528,7 @@ void IEngine::LogErrorMessage(const char * msg)
 
 v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 {
+	//isolate should be already entered;
 	isolate = iso;
 	////making iface template
 	ifaceTemplate = v8::ObjectTemplate::New(iso);
@@ -514,7 +548,8 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 		}
 
 		for (auto &prop : globalTemplate->props) {
-			global->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), Getter);
+			auto prop_name = prop->name.c_str();
+			global->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop_name, v8::NewStringType::kNormal).ToLocalChecked(), Getter);
 		}
 		for (auto &enumField : globalTemplate->enums) {
 			global->PrototypeTemplate()->Set(isolate, enumField->name.c_str(), v8::Integer::New(isolate, enumField->value));
@@ -545,9 +580,10 @@ IEngine::~IEngine()
 
 void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->IndPropGetterCall) {
 		auto getterArgs = new IGetterArgs(info, index);
 		engine->IndPropGetterCall(getterArgs);
@@ -558,9 +594,10 @@ void IEngine::IndexedPropGetter(unsigned int index, const v8::PropertyCallbackIn
 
 void IEngine::IndexedPropSetter(unsigned int index, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->IndPropSetterCall) {
 		auto setterArgs = new ISetterArgs(info, index, value);
 		engine->IndPropSetterCall(setterArgs);
@@ -571,9 +608,10 @@ void IEngine::IndexedPropSetter(unsigned int index, v8::Local<v8::Value> value, 
 
 void IEngine::FieldGetter(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->fieldGetterCall) {
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
@@ -585,9 +623,10 @@ void IEngine::FieldGetter(v8::Local<v8::String> property, const v8::PropertyCall
 
 void IEngine::FieldSetter(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->fieldSetterCall) {
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new ISetterArgs(info, *str, value);
@@ -599,9 +638,10 @@ void IEngine::FieldSetter(v8::Local<v8::String> property, v8::Local<v8::Value> v
 
 void IEngine::Getter(v8::Local<v8::String> property, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->getterCall) {
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
@@ -613,9 +653,10 @@ void IEngine::Getter(v8::Local<v8::String> property, const v8::PropertyCallbackI
 
 void IEngine::Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<void>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->setterCall) {
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new ISetterArgs(info, *str, value);
@@ -627,9 +668,10 @@ void IEngine::Setter(v8::Local<v8::String> property, v8::Local<v8::Value> value,
 
 void IEngine::InterfaceGetter(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->IFaceGetterPropCall) {
 		v8::String::Utf8Value str(property);
 		auto getterArgs = new IGetterArgs(info, *str);
@@ -641,9 +683,10 @@ void IEngine::InterfaceGetter(v8::Local<v8::Name> property, const v8::PropertyCa
 
 void IEngine::InterfaceSetter(v8::Local<v8::Name> property, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
-	IEngine * engine = static_cast<IEngine*>(info.GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(info.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->IFaceSetterPropCall) {
 		v8::String::Utf8Value str(property);
 		auto setterArgs = new IIntfSetterArgs(info, *str, value);
@@ -655,9 +698,10 @@ void IEngine::InterfaceSetter(v8::Local<v8::Name> property, v8::Local<v8::Value>
 
 void IEngine::InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
-	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(args.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->IFaceMethodCall) {
 		auto methodArgs = new IMethodArgs(args);
 		engine->IFaceMethodCall(methodArgs);
@@ -668,9 +712,10 @@ void IEngine::InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& a
 
 void IEngine::FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 {
-	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(args.GetIsolate());
 	if (!engine)
 		return;
+	v8::Isolate::Scope iso_scope(engine->isolate);
 	if (engine->methodCall) {
 		auto methodArgs = new IMethodArgs(args);
 		engine->methodCall(methodArgs);
@@ -687,11 +732,22 @@ void IEngine::Throw_Exception(const char * error_msg)
 
 void IEngine::MessageListener(v8::Local<v8::Message> message, v8::Local<v8::Value> error)
 {
-	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(v8::Isolate::GetCurrent());
 	if (!engine)
 		return;
+	v8::Isolate::Scope scope(engine->isolate);
 	v8::String::Utf8Value str(message->Get());
 	engine->LogErrorMessage(*str);
+}
+
+IEngine * IEngine::GetEngine(v8::Isolate * iso)
+{
+	if (iso)
+		return static_cast<IEngine *>(iso->GetData(EngineSlot));
+	/*auto ctx = iso->GetCurrentContext();
+	if (*ctx)
+		return static_cast<IEngine *>(ctx->GetAlignedPointerFromEmbedderData(EngineSlot));*/
+	return nullptr;
 }
 
 inline void IObjectTemplate::SetMethod(char * methodName, void * methodCall) {
@@ -785,19 +841,23 @@ bool IValue::ArgIsUndefined()
 //get arg 
 
 inline double IValue::GetArgAsNumber() {
+	v8::Isolate::Scope scope(isolate);
 	return v8Value.Get(isolate)->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
 }
 
 int IValue::GetArgAsInt()
 {
+	v8::Isolate::Scope scope(isolate);
 	return v8Value.Get(isolate)->Int32Value(isolate->GetCurrentContext()).FromMaybe(0);
 }
 
 inline bool IValue::GetArgAsBool() {
+	v8::Isolate::Scope scope(isolate);
 	return v8Value.Get(isolate)->BooleanValue(isolate->GetCurrentContext()).FromMaybe(false);
 }
 
 inline char * IValue::GetArgAsString() {
+	v8::Isolate::Scope scope(isolate);
 	v8::String::Utf8Value str(v8Value.Get(isolate));	
 	char *it1 = *str;
 	char *it2 = *str + str.length();
@@ -809,6 +869,7 @@ inline char * IValue::GetArgAsString() {
 
 IObject * IValue::GetArgAsObject()
 {
+	v8::Isolate::Scope scope(isolate);
 	if (!obj) {
 		obj = new IObject(isolate, v8Value.Get(isolate)->ToObject(isolate->GetCurrentContext()).ToLocalChecked());
 	}
@@ -817,6 +878,7 @@ IObject * IValue::GetArgAsObject()
 
 IValueArray * IValue::GetArgAsArray()
 {
+	v8::Isolate::Scope scope(isolate);
 	if (arr = nullptr)
 	arr = new IValueArray(isolate, v8::Local<v8::Array>::Cast(v8Value.Get(isolate)));
 	return arr;
@@ -861,7 +923,7 @@ IValue::IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index)
 
 void * IMethodArgs::GetDelphiObject()
 {
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	if (!eng)
 		return nullptr;
 	auto data = args->Data();
@@ -877,7 +939,7 @@ void * IMethodArgs::GetDelphiObject()
 
 void * IMethodArgs::GetDelphiClasstype()
 {
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	if (!eng)
 		return nullptr;
 	auto holder = args->Holder();
@@ -921,7 +983,7 @@ void IMethodArgs::SetReturnValueUndefined()
 void IMethodArgs::SetReturnValueIFace(void * value)
 {
 	v8::Isolate * iso = args->GetIsolate();
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	auto ctx = iso->GetCurrentContext();
 	v8::Local<v8::Object> obj = eng->ifaceTemplate->NewInstance(ctx).ToLocalChecked();
 	obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
@@ -931,7 +993,7 @@ void IMethodArgs::SetReturnValueIFace(void * value)
 void IMethodArgs::SetReturnValueClass(void * value, void* dClasstype)
 {
 	v8::Isolate * iso = args->GetIsolate();
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	auto dTempl = eng->GetObjectByClass(dClasstype);
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
@@ -1007,7 +1069,7 @@ void IMethodArgs::SetError(char * errorMsg)
 
 void * IMethodArgs::GetEngine()
 {
-	IEngine * engine = static_cast<IEngine*>(args->GetIsolate()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(iso);
 	if (!engine)
 		return nullptr;
 	return engine->DEngine;
@@ -1095,8 +1157,9 @@ void IValueArray::SetValue(IValue * value, int index)
 {
 	auto v8_array = arr.Get(iso);
 #ifdef DEBUG
+	v8::Isolate::Scope scope(iso);
 	v8::String::Utf8Value str(value->GetV8Value());
-#endif // DEBUG
+#endif DEBUG
 	v8_array->Set(iso->GetCurrentContext(), index, value->GetV8Value());
 }
 
@@ -1135,7 +1198,7 @@ IGetterArgs::IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int in
 
 void * IGetterArgs::GetDelphiObject()
 {
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	if (!eng)
 		return nullptr;
 	auto holder = propinfo->Holder();
@@ -1144,7 +1207,7 @@ void * IGetterArgs::GetDelphiObject()
 
 void * IGetterArgs::GetDelphiClasstype()
 {
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	if (!eng)
 		return nullptr;
 	auto holder = propinfo->Holder();
@@ -1172,7 +1235,7 @@ void IGetterArgs::SetGetterResultUndefined()
 void IGetterArgs::SetGetterResultIFace(void * value)
 {
 	v8::Isolate * iso = propinfo->GetIsolate();
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	auto ctx = iso->GetCurrentContext();
 	v8::Local<v8::Object> obj = eng->ifaceTemplate->NewInstance(ctx).ToLocalChecked();
 	obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
@@ -1183,7 +1246,7 @@ void IGetterArgs::SetGetterResultAsInterfaceFunction(void * intf, char * funcNam
 {
 	v8::Isolate * iso = propinfo->GetIsolate();
 	auto ctx = iso->GetCurrentContext();
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	auto arr = v8::Array::New(iso, 0);
 	////0 - interface pointer, 1 - function name
 	arr->Set(ctx, 0, v8::External::New(iso, intf));
@@ -1197,7 +1260,7 @@ void IGetterArgs::SetGetterResultAsInterfaceFunction(void * intf, char * funcNam
 void IGetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 {
 	v8::Isolate * iso = propinfo->GetIsolate();
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	auto dTempl = eng->GetObjectByClass(dClasstype);
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
@@ -1249,7 +1312,7 @@ void IGetterArgs::SetError(char * errorMsg)
 
 void * IGetterArgs::GetEngine()
 {
-	IEngine * engine = static_cast<IEngine*>(v8::Isolate::GetCurrent()->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(iso);
 	if (!engine)
 		return nullptr;
 	return engine->DEngine;
@@ -1277,7 +1340,7 @@ ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int in
 
 void * ISetterArgs::GetEngine()
 {
-	IEngine * engine = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(iso);
 	if (!engine)
 		return nullptr;
 	return engine->DEngine;
@@ -1285,7 +1348,7 @@ void * ISetterArgs::GetEngine()
 
 void * ISetterArgs::GetDelphiObject()
 {
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	if (!eng)
 		return nullptr;
 	v8::Local<v8::Object> holder;
@@ -1300,7 +1363,7 @@ void * ISetterArgs::GetDelphiObject()
 
 void * ISetterArgs::GetDelphiClasstype()
 {
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	if (!eng)
 		return nullptr;
 	v8::Local<v8::Object> holder;
@@ -1506,7 +1569,7 @@ void IFunction::AddArgAsObject(void * value, void * classtype)
 {
 	//argv.push_back(v8::External::New(iso, obj));
 	//// it should work
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	auto dTempl = eng->GetObjectByClass(classtype);
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
@@ -1538,7 +1601,7 @@ IIntfSetterArgs::IIntfSetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info
 
 void * IIntfSetterArgs::GetEngine()
 {
-	IEngine * engine = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * engine = IEngine::GetEngine(iso);
 	if (!engine)
 		return nullptr;
 	return engine->DEngine;
@@ -1546,7 +1609,7 @@ void * IIntfSetterArgs::GetEngine()
 
 void * IIntfSetterArgs::GetDelphiObject()
 {
-	IEngine * eng = static_cast<IEngine*>(iso->GetData(EngineSlot));
+	IEngine * eng = IEngine::GetEngine(iso);
 	if (!eng)
 		return nullptr;
 	v8::Local<v8::Object> holder;

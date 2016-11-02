@@ -241,7 +241,7 @@ static void PrintErrorString(const char* format, ...) {
   {
 	  auto iso = Isolate::GetCurrent();
 	  if (iso) {
-		  auto eng = static_cast<Bv8::IEngine*>(iso->GetData(Bv8::EngineSlot));
+		  auto eng = Bv8::IEngine::GetEngine(iso);
 		  if (eng) {
 			  int n = _vscprintf(format, ap);
 			  std::vector<char> out(n + 1);
@@ -4361,7 +4361,7 @@ void FreeEnvironment(Environment* env) {
 ////variables for keep script alive after running
 class ScriptParams {
 public:
-	ScriptParams(Isolate * iso) : locker(iso), isolate_scope(iso), h_scope(iso) {};
+	ScriptParams(Isolate * iso) : locker(iso), /*isolate_scope(iso),*/ h_scope(iso) {};
 	~ScriptParams() {
 		auto k = 0;
 		for (int i = 0; i < 4; i++) {
@@ -4380,7 +4380,7 @@ public:
 
 private:
 	Locker locker;
-	Isolate::Scope isolate_scope;
+	//Isolate::Scope isolate_scope;
 	HandleScope h_scope;
 	NodeInstanceData * instance_data;
 	Local<Context> ctx;
@@ -4414,15 +4414,22 @@ ArrayBufferAllocator array_buffer_allocator;
 NodeEngine::NodeEngine()
 {
 	node_started = false;
+	//node_engine_isolate = nullptr;
+	Isolate::CreateParams params;
+	params.array_buffer_allocator = &array_buffer_allocator;
+	node_engine_isolate = Isolate::New(params);
+	script_params_ptr = new ScriptParams(node_engine_isolate);	
 }
 
 NodeEngine::~NodeEngine()
 {
 	//isolate->TerminateExecution();
 	//it should be there, but now it throws an exception
-	//isolate->Dispose();
-	//isolate = nullptr;
+	node_engine_isolate->Dispose();
+	//node_engine_isolate = nullptr;
 }
+
+//static v8::Isolate * node_engine_isolate;
 
 void NodeEngine::StartNodeInstance(void* arg, void* eng) {
   using namespace Bv8;
@@ -4430,33 +4437,34 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 	 // throw V8Exception();
   //}
   NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
-  Isolate::CreateParams params;
-  /*ArrayBufferAllocator array_buffer_allocator;*/
-  params.array_buffer_allocator = &array_buffer_allocator;
-#ifdef NODE_ENABLE_VTUNE_PROFILING
-  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
-#endif
+//  Isolate::CreateParams params;
+//  /*ArrayBufferAllocator array_buffer_allocator;*/
+//  params.array_buffer_allocator = &array_buffer_allocator;
+//#ifdef NODE_ENABLE_VTUNE_PROFILING
+//  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
+//#endif
   ///
-  /*Isolate**/ isolate = Isolate::New(params);
+ // if (!node_engine_isolate)
+	///*Isolate**/ node_engine_isolate = Isolate::New(params);
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
     if (instance_data->is_main()) {
       CHECK_EQ(node_isolate, nullptr);
-      node_isolate = isolate;
+      node_isolate = node_engine_isolate;
     }
   }
 
+  Isolate::Scope iso_scope(node_engine_isolate);
+
   if (track_heap_objects) {
-    isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
+	  node_engine_isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
   }
 
   {	  
 	  ////Locker locker(isolate);
 	  ////Isolate::Scope isolate_scope(isolate);
 	  ////HandleScope handle_scope(isolate);
-	  auto script_params = new ScriptParams(isolate);
-	  script_params_ptr = script_params;
-	  auto iso_data_wrapper = new IsolateDataWrapper(isolate, instance_data->event_loop(),
+	  auto iso_data_wrapper = new IsolateDataWrapper(node_engine_isolate, instance_data->event_loop(),
 		  array_buffer_allocator.zero_fill_field());
 	  iso_data_wrapper_ptr = iso_data_wrapper;
 	  ////IsolateData isolate_data(isolate, instance_data->event_loop(),
@@ -4464,18 +4472,20 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 	  auto global = Local<ObjectTemplate>();
 	  if (eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
-		  global = engine->MakeGlobalTemplate(isolate);
-		  isolate->SetData(0, engine);
+		  global = engine->MakeGlobalTemplate(node_engine_isolate);
+		  node_engine_isolate->SetData(EngineSlot, engine);
 	  }
 	  ////Local<Context> context = Context::New(isolate, NULL, global);
-	  auto context = script_params->CreateContext(isolate, global);
+	  auto script_params = static_cast<ScriptParams *>(script_params_ptr);
+	  auto context = script_params->CreateContext(node_engine_isolate, global);
 
 	  if (eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  //context->SetAlignedPointerInEmbedderData(EngineSlot, engine);
 		  auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked();
 		  if (engine->globalTemplate) {
-			  globalObject->SetInternalField(0, v8::External::New(isolate, engine->globObject));
-			  globalObject->SetInternalField(1, v8::External::New(isolate, engine->globalTemplate->DClass));
+			  globalObject->SetInternalField(0, v8::External::New(node_engine_isolate, engine->globObject));
+			  globalObject->SetInternalField(1, v8::External::New(node_engine_isolate, engine->globalTemplate->DClass));
 		  }
 		  //globalObject->SetIntegrityLevel(context, v8::IntegrityLevel::kSealed);
 	  }
@@ -4498,7 +4508,7 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 
 	  node_started = true;
 
-	  isolate->SetAbortOnUncaughtExceptionCallback(
+	  node_engine_isolate->SetAbortOnUncaughtExceptionCallback(
 		  ShouldAbortOnUncaughtException);
 
 	  // Start debug agent when argv has --debug
@@ -4509,7 +4519,6 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 		  Environment::AsyncCallbackScope callback_scope(env);
 		  LoadEnvironment(env);
 	  }
-
 	  env->set_trace_sync_io(trace_sync_io);
 
 	  // Enable debugger
@@ -4517,14 +4526,14 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 		  EnableDebug(env);
 
 	  {
-		  SealHandleScope seal(isolate);
+		  SealHandleScope seal(node_engine_isolate);
 		  bool more;
 		  do {
-			  v8_platform.PumpMessageLoop(isolate);
+			  v8_platform.PumpMessageLoop(node_engine_isolate);
 			  more = uv_run(env->event_loop(), UV_RUN_ONCE);
 
 			  if (more == false) {
-				  v8_platform.PumpMessageLoop(isolate);
+				  v8_platform.PumpMessageLoop(node_engine_isolate);
 				  EmitBeforeExit(env);
 
 				  // Emit `beforeExit` if the loop became alive either after emitting
@@ -4543,9 +4552,10 @@ void NodeEngine::StopNodeInstance() {
 	if (!node_started)
 		return;
 	//auto isolate = isolate;
-	auto ctx = isolate->GetCurrentContext();
+	auto ctx = node_engine_isolate->GetCurrentContext();
 	if (*ctx)
 		ctx->Exit();
+	node_engine_isolate->TerminateExecution();
 	auto instance_data = static_cast<ScriptParams *>(script_params_ptr)->GetInstanceData();
 	Environment * env = static_cast<EnvWrapeer *>(env_wrapper_ptr)->GetEnvironment();
 
@@ -4566,10 +4576,10 @@ void NodeEngine::StopNodeInstance() {
 
 	{
 		Mutex::ScopedLock scoped_lock(node_isolate_mutex);
-		if (node_isolate == isolate)
+		if (node_isolate == node_engine_isolate)
 			node_isolate = nullptr;
 	}
-	CHECK_NE(isolate, nullptr);
+	CHECK_NE(node_engine_isolate, nullptr);
 	delete static_cast<EnvWrapeer *>(env_wrapper_ptr);
 	delete static_cast<IsolateDataWrapper *>(iso_data_wrapper_ptr);
 	delete static_cast<ScriptParams *>(script_params_ptr);
