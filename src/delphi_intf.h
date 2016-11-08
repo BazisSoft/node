@@ -10,6 +10,7 @@
 #include <string.h>
 #include <vector>
 #include <stack>
+#include <unordered_map>
 
 #define APIENTRY __stdcall
 #define BZINTF _declspec(dllexport)
@@ -184,6 +185,7 @@ public:
 	virtual void APIENTRY SetGetterResultBool(bool val);
 	virtual void APIENTRY SetGetterResultString(char * val);
 	virtual void APIENTRY SetGetterResultDouble(double val);
+	virtual void APIENTRY SetGetterResultAsIndexObject(void * parentObj, void* rttiProp);
 	virtual void APIENTRY SetGetterResultAsRecord();
 	virtual IRecord * APIENTRY GetGetterResultAsRecord();
 
@@ -294,6 +296,7 @@ public:
 	virtual void APIENTRY SetMethod(char * methodName, void * methodCall);
 	////maybe there isn't needed propObj
 	virtual void APIENTRY SetProp(char* propName, void * propObj, bool read, bool write);
+	virtual void APIENTRY SetIndexedProp(char* propName, void * propObj, bool read, bool write);
 	virtual void APIENTRY SetField(char* fieldName);
 	virtual void APIENTRY SetEnumField(char * valuename, int value);
 	virtual void APIENTRY SetHasIndexedProps(bool hasIndProps);
@@ -302,6 +305,7 @@ public:
 	void * DClass = nullptr;
 	v8::Local<v8::FunctionTemplate> objTempl;
 	std::vector<std::unique_ptr<IObjectProp>> props;
+	std::vector<std::unique_ptr<IObjectProp>> ind_props;
 	std::vector<std::string> fields;
 	std::vector<std::unique_ptr<IObjectMethod>> methods;
 	std::vector<std::unique_ptr<IDelphiEnumValue>> enums;
@@ -346,8 +350,9 @@ public:
 	virtual void APIENTRY SetPropSetterCallBack(TSetterCallBack callBack);
 	virtual void APIENTRY SetFieldGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetFieldSetterCallBack(TSetterCallBack callBack);
-	virtual void APIENTRY SetIndexedPropGetterCallBack(TGetterCallBack callBack);
-	virtual void APIENTRY SetIndexedPropSetterCallBack(TSetterCallBack callBack);
+	virtual void APIENTRY SetIndexedPropGetterObjCallBack(TGetterCallBack callBack);
+	virtual void APIENTRY SetIndexedPropGetterNumberCallBack(TGetterCallBack callBack);
+	virtual void APIENTRY SetIndexedPropSetterNumberCallBack(TSetterCallBack callBack);
 	virtual void APIENTRY SetInterfaceGetterPropCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetInterfaceSetterPropCallBack(TIntfSetterCallBack callBack);
 	virtual void APIENTRY SetInterfaceMethodCallBack(TMethodCallBack callBack);
@@ -368,11 +373,15 @@ public:
 	virtual void* GetDelphiObject(v8::Local<v8::Object> holder);
 	virtual void* GetDelphiClasstype(v8::Local<v8::Object> obj);
 
+	v8::Local<v8::Object> FindObject(void * dObj, void * classType, v8::Isolate * iso);
+	void AddObject(void * dObj, void * classType, v8::Local<v8::Object> obj, v8::Isolate * iso);
+
 	void LogErrorMessage(const char * msg);
 
 	v8::Local<v8::ObjectTemplate> MakeGlobalTemplate(v8::Isolate * iso);
 	//will be initialized at MakeGlobalTemplate method.
 	v8::Local<v8::ObjectTemplate> ifaceTemplate;
+	v8::Local<v8::ObjectTemplate> indexedObjTemplate;
 	
 	//callback for delphi's interface method (TODO:: It shouldn't be public)
 	static void InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
@@ -384,6 +393,8 @@ private:
 	std::vector<std::unique_ptr<IBazisIntf>> IValues;
 	node::NodeEngine * node_engine;
 
+	std::unordered_map<int64_t, v8::Persistent<v8::Object, v8::CopyablePersistentTraits<v8::Object>> > JSObjects;
+
 	std::unique_ptr<IValueArray> run_result_array;
 	std::unique_ptr<IValue> run_result_value;
 
@@ -392,6 +403,7 @@ private:
 	TSetterCallBack setterCall;
 	TGetterCallBack fieldGetterCall;
 	TSetterCallBack fieldSetterCall;
+	TGetterCallBack IndPropGetterObjCall;
 	TGetterCallBack IndPropGetterCall;
 	TSetterCallBack IndPropSetterCall;
 	TGetterCallBack IFaceGetterPropCall;
@@ -407,6 +419,8 @@ private:
 	std::vector<std::string> fields;
 	std::vector<v8::Local<v8::ObjectTemplate>> v8Templates;
 
+	static void IndexedPropObjGetter(v8::Local<v8::String> property,
+		const v8::PropertyCallbackInfo<v8::Value>& info);
 	static void IndexedPropGetter(unsigned int index, const v8::PropertyCallbackInfo<v8::Value>& info);
 	static void IndexedPropSetter(unsigned int index, v8::Local<v8::Value> value, const v8::PropertyCallbackInfo<v8::Value>& info);
 

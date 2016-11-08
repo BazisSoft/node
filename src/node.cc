@@ -4418,13 +4418,14 @@ NodeEngine::NodeEngine()
 	Isolate::CreateParams params;
 	params.array_buffer_allocator = &array_buffer_allocator;
 	node_engine_isolate = Isolate::New(params);
-	script_params_ptr = new ScriptParams(node_engine_isolate);	
+	script_params_ptr = new ScriptParams(node_engine_isolate);
 }
 
 NodeEngine::~NodeEngine()
 {
 	//isolate->TerminateExecution();
 	//it should be there, but now it throws an exception
+	delete static_cast<ScriptParams *>(script_params_ptr);
 	node_engine_isolate->Dispose();
 	//node_engine_isolate = nullptr;
 }
@@ -4433,19 +4434,10 @@ NodeEngine::~NodeEngine()
 
 void NodeEngine::StartNodeInstance(void* arg, void* eng) {
   using namespace Bv8;
-  //if (isolate) {
-	 // throw V8Exception();
-  //}
+  if (!node_engine_isolate) {
+	  throw V8Exception();
+  }
   NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
-//  Isolate::CreateParams params;
-//  /*ArrayBufferAllocator array_buffer_allocator;*/
-//  params.array_buffer_allocator = &array_buffer_allocator;
-//#ifdef NODE_ENABLE_VTUNE_PROFILING
-//  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
-//#endif
-  ///
- // if (!node_engine_isolate)
-	///*Isolate**/ node_engine_isolate = Isolate::New(params);
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
     if (instance_data->is_main()) {
@@ -4461,36 +4453,26 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
   }
 
   {	  
-	  ////Locker locker(isolate);
-	  ////Isolate::Scope isolate_scope(isolate);
-	  ////HandleScope handle_scope(isolate);
 	  auto iso_data_wrapper = new IsolateDataWrapper(node_engine_isolate, instance_data->event_loop(),
 		  array_buffer_allocator.zero_fill_field());
 	  iso_data_wrapper_ptr = iso_data_wrapper;
-	  ////IsolateData isolate_data(isolate, instance_data->event_loop(),
-   ////                            array_buffer_allocator.zero_fill_field());
 	  auto global = Local<ObjectTemplate>();
 	  if (eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
 		  global = engine->MakeGlobalTemplate(node_engine_isolate);
 		  node_engine_isolate->SetData(EngineSlot, engine);
 	  }
-	  ////Local<Context> context = Context::New(isolate, NULL, global);
 	  auto script_params = static_cast<ScriptParams *>(script_params_ptr);
 	  auto context = script_params->CreateContext(node_engine_isolate, global);
 
 	  if (eng) {
 		  IEngine	* engine = static_cast<IEngine *>(eng);
-		  //context->SetAlignedPointerInEmbedderData(EngineSlot, engine);
 		  auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked();
 		  if (engine->globalTemplate) {
 			  globalObject->SetInternalField(0, v8::External::New(node_engine_isolate, engine->globObject));
 			  globalObject->SetInternalField(1, v8::External::New(node_engine_isolate, engine->globalTemplate->DClass));
 		  }
-		  //globalObject->SetIntegrityLevel(context, v8::IntegrityLevel::kSealed);
 	  }
-
-	  ////Context::Scope context_scope(context);
 	  ////make enter manually without Context::Scope, and context will exit when delphi engine will be destroyed;	
 	  context->Enter();
 	  if (eng) {
@@ -4582,7 +4564,7 @@ void NodeEngine::StopNodeInstance() {
 	CHECK_NE(node_engine_isolate, nullptr);
 	delete static_cast<EnvWrapeer *>(env_wrapper_ptr);
 	delete static_cast<IsolateDataWrapper *>(iso_data_wrapper_ptr);
-	delete static_cast<ScriptParams *>(script_params_ptr);
+	//delete static_cast<ScriptParams *>(script_params_ptr);
 	node_started = false;
 }
 
