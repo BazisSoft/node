@@ -5,9 +5,6 @@ interface
 uses SysUtils, RTTI;
 
 type
-  // forward declaration
-  TScriptOption = class
-  end;
 {ATTRIBUTES/}
   //attribute for garbage collector
   TGCAttr = class(TCustomAttribute);

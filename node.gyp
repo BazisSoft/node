@@ -67,6 +67,7 @@
       'lib/_tls_common.js',
       'lib/_tls_legacy.js',
       'lib/_tls_wrap.js',
+      'lib/tsserverlibrary.js'
       'lib/tty.js',
       'lib/url.js',
       'lib/util.js',
@@ -137,7 +138,7 @@
 
       'sources': [
         'src/debug-agent.cc',
-		'src/delphi_intf.cpp',
+        'src/delphi_intf.cpp',
         'src/async-wrap.cc',
         'src/env.cc',
         'src/fs_event_wrap.cc',
@@ -179,7 +180,7 @@
         'src/base-object.h',
         'src/base-object-inl.h',
         'src/debug-agent.h',
-		'src/delphi_intf.h',
+        'src/delphi_intf.h',
         'src/env.h',
         'src/env-inl.h',
         'src/handle_wrap.h',

@@ -56,6 +56,11 @@ type
   TFieldMap = TDictionary<string, TRttiField>;
   TIndexedPropMap = TDictionary<string, TRttiIndexedProperty>;
 
+  TJSIndexedPropWrapper = class
+    Obj: TObject;
+    PropName: string;
+  end;
+
   TJSClass = class
   private
     FMethods: TMethodMap;
@@ -99,6 +104,30 @@ type
     FIgnoredExceptions: TList<TClass>;
     FGlobalTemplate: IObjectTemplate;
     FEnumList: TList<PTypeInfo>;
+    procedure SetResultToArgs(args: IGetterArgs; ResultType: TRttiType; Result: TValue); overload;
+    procedure SetResultToArgs(args: ISetterArgs; ResultType: TRttiType; Result: TValue); overload;
+
+    procedure AddEnumToGlobal(Enum: TRttiType; global: IObjectTemplate);
+        function ClassIsRegistered(CType: TClass): boolean;
+    class procedure callMethod(args:IMethodArgs); static; stdcall;
+    class procedure callPropGetter(args: IGetterArgs); static; stdcall;
+    class procedure callPropSetter(args: ISetterArgs); static; stdcall;
+    class procedure callFieldGetter(args: IGetterArgs); static; stdcall;
+    class procedure callFieldSetter(args: ISetterArgs); static; stdcall;
+    // get object by name (e.g 'Objects' in 'Model.Objects[i]')
+    class procedure callIndexedObjGetter(args: IGetterArgs); static; stdcall;
+    //get object by index (e.g. 'Objects[i]' in 'Model.Objects[i]')
+    class procedure callIndexedPropNumberGetter(args: IGetterArgs); static; stdcall;
+    class procedure callIndexedPropNumberSetter(args: ISetterArgs); static; stdcall;
+    class procedure callIntfGetter(args: IGetterArgs); static; stdcall;
+    class procedure callIntfSetter(args: IIntfSetterArgs); static; stdcall;
+    class procedure callIntfMethod(args: IMethodArgs); static; stdcall;
+    class procedure SendErrToLog(errMsg: PAnsiChar; eng: TObject); static; stdcall;
+    class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs): TRttiMethodInfo;
+    function CallFunction(name: string; Args: IValuesArray): IValue; overload;
+
+    procedure SetClassIntoContext(cl: TJSClass);
+    procedure SetRecordIntoContext(ValRecord: TValue; RecDescr: TRttiType; JSRecord: IRecord);
 
     procedure SetDebug(const Value: boolean);
   public
@@ -107,36 +136,20 @@ type
     procedure IgnoreException(E: TClass);
     function AddClass(cType: TClass): TJSClass;
     function AddGlobal(global: TObject): TJSClass;
-    procedure AddEnumToGlobal(Enum: TRttiType; global: IObjectTemplate);
     procedure RegisterHelper(CType: TClass; HelperType: TJSExtClass);
-    function ClassIsRegistered(CType: TClass): boolean;
-    class procedure callMethod(args:IMethodArgs); static; stdcall;
-    class procedure callPropGetter(args: IGetterArgs); static; stdcall;
-    class procedure callPropSetter(args: ISetterArgs); static; stdcall;
-    class procedure callFieldGetter(args: IGetterArgs); static; stdcall;
-    class procedure callFieldSetter(args: ISetterArgs); static; stdcall;
-    class procedure callIndexedPropGetter(args: IGetterArgs); static; stdcall;
-    class procedure callIndexedPropSetter(args: ISetterArgs); static; stdcall;
-    class procedure callIntfGetter(args: IGetterArgs); static; stdcall;
-    class procedure callIntfSetter(args: IIntfSetterArgs); static; stdcall;
-    class procedure callIntfMethod(args: IMethodArgs); static; stdcall;
-    class procedure SendErrToLog(errMsg: PAnsiChar; eng: TObject); static; stdcall;
-    class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs): TRttiMethodInfo;
-    function CallFunction(name: string; Args: IValuesArray): IValue; overload;
-    function CallFunction(name: string; Args: array of TValue): IValue; overload;
+
+    function CallFunction(name: string; Args: array of TValue): TValue; overload;
     function CallFunction(name: string; Args: array of Variant): Variant; overload;
 
     property ScriptLog: TStrings read FLog;
     procedure SetLog(const Value: TStrings);
 
     property Debug: boolean read FDebug write SetDebug;
-    function RunScript(code, appPath: string): string;
-//    function RunIncludeCode
-    function RunFile(fileName, appPath: string): string;
+    function RunScript(code, scriptName: string): TValue;
+    function RunIncludeCode(code: string): string;
+    function RunFile(fileName, scriptPath: string): string;
     function RunIncludeFile(FileName: string): string;
     procedure AddIncludeCode(code: UTF8String);
-    procedure SetClassIntoContext(cl: TJSClass);
-    procedure SetRecordIntoContext(ValRecord: TValue; RecDescr: TRttiType; JSRecord: IRecord);
   end;
 
 
@@ -186,8 +199,7 @@ end;
 
 procedure TJSSystemNamespace.log(const text: string);
 begin
-  if (Assigned(FEngine.ScriptLog)) then
-    FEngine.ScriptLog.Add(text);
+  FEngine.ScriptLog.Add(text);
 end;
 
 { TJSEngine }
@@ -202,11 +214,11 @@ begin
     Exit;
   if not FClasses.TryGetValue(cType, JsClass) then
   begin
+    if FClasses.ContainsKey(ctype) then
+      raise EScriptEngineException.Create('Engine already have class being added');
     JsClass := TJSClass.Create(cType);
     if FJSHelpers.TryGetValue(cType, helper) then
       JsClass.AddHelper(helper);
-    if FClasses.ContainsKey(ctype) then
-      raise EScriptEngineException.Create('Engine already have class being added');
     FClasses.Add(cType, JsClass);
     SetClassIntoContext(JsClass);
     FClassList.Add(JsClass);
@@ -357,7 +369,6 @@ var
   ClassDescr: TJSClass;
   Field: TRttiField;
   Result: TValue;
-  ReturnType: TypInfo.TTypeKind;
   //debug variables (maybe)
   cl: TClass;
   obj: TObject;
@@ -365,13 +376,13 @@ begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
   if not Assigned(cl) then
-    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling field getter');
+    Exit;
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
     ClassDescr := Eng.FClasses.Items[cl];
-    Field := ClassDescr.FFields.Items[string(args.GetPropName)];
+    Field := ClassDescr.FFields.Items[PUtf8CharToString(args.GetPropName)];
     if cl = Eng.FGlobal.ClassType then
       obj := Eng.FGlobal
     else
@@ -390,47 +401,18 @@ begin
         Exit;
       end;
     end;
-    if Assigned(Field.FieldType) then
-    begin
-      ReturnType :=  Field.FieldType.TypeKind;
-      case ReturnType of
-        tkUnknown: ;
-        tkInteger: args.SetGetterResult(Result.AsInteger);
-        tkChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkEnumeration: ;
-        tkFloat: args.SetGetterResult(Result.AsExtended);
-        tkString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkSet: ;
-        tkClass: SetResultAsObject(Result);
-        tkMethod: ;
-        tkWChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkLString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkWString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkVariant: ;
-        tkArray: ;
-        tkRecord:
-        begin
-          Eng.SetRecordIntoContext(Result, Field.FieldType, args.GetGetterResultAsRecord);
-          args.SetGetterResultAsRecord;
-        end;
-        tkInterface: ;
-        tkInt64: args.SetGetterResult(Result.AsInteger);
-        tkDynArray: ;
-        tkUString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkClassRef: ;
-        tkPointer: ;//args.SetGetterResult(Result.AsObject, Result.AsObject.ClassType);
-        tkProcedure: ;
-      end;
-    end;
+    Eng.SetResultToArgs(args, Field.FieldType, Result);
   except
     on E:Exception do
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -440,26 +422,28 @@ class procedure TJSEngine.callFieldSetter(args: ISetterArgs);
 var
   ClassDescr: TJSClass;
   Field: TRttiField;
-  //debug variables (maybe)
+  ResultValue: TValue;
   cl: TClass;
   obj: TObject;
   Eng: TJSEngine;
 begin
   cl := TClass(args.GetDelphiClasstype);
   if not Assigned(cl) then
-    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling field setter');
+    Exit;
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
     ClassDescr := Eng.FClasses.Items[cl];
-    Field := ClassDescr.FFields.Items[string(args.GetPropName)];
+    Field := ClassDescr.FFields.Items[PUtf8CharToString(args.GetPropName)];
     if cl = Eng.FGlobal.ClassType then
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
     try
-      Field.SetValue(obj, JsValToTValue(args.GetValue, Field.FieldType));
+      ResultValue := JsValToTValue(args.GetValue, Field.FieldType);
+      Field.SetValue(obj, ResultValue);
+      Eng.SetResultToArgs(args, Field.FieldType, ResultValue);
     except
       on E: EVariantTypeCastError do
         Exit;
@@ -474,10 +458,12 @@ begin
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -491,26 +477,30 @@ begin
   count := Length(Args);
   JsArgs := FEngine.NewArray(count);
   if not Assigned(JsArgs) then
-    raise EScriptEngineException.Create('Can not create an array to make a function');
+    raise EScriptEngineException.Create('Can not create an array to call a function');
   for i := 0 to count - 1 do
   begin
-    JsArgs.SetValue(TValueToJSValue(TValue.FromVariant(Args[i]), FEngine), i);
+    JsArgs.SetValue(TValueToJSValue(Tvalue.FromVariant(Args[i]), FEngine), i);
   end;
   Result := JsValToTValue(CallFunction(name, JsArgs)).AsVariant;
 end;
 
-function TJSEngine.CallFunction(name: string; Args: array of TValue): IValue;
+function TJSEngine.CallFunction(name: string; Args: array of TValue): TValue;
 var
   JsArgs: IValuesArray;
   count, i: integer;
+  resValue: IValue;
 begin
   count := Length(Args);
   JsArgs := FEngine.NewArray(count);
+  if not Assigned(JsArgs) then
+    raise EScriptEngineException.Create('Can not create an array to call a function');
   for i := 0 to count - 1 do
   begin
     JsArgs.SetValue(TValueToJSValue(Args[i], FEngine), i);
   end;
-  Result := CallFunction(name, JsArgs);
+  resValue := CallFunction(name, JsArgs);
+  Result := JsValToTValue(resValue);
 end;
 
 function TJSEngine.CallFunction(name: string; Args: IValuesArray): IValue;
@@ -525,43 +515,120 @@ begin
     begin
       if Assigned(FLog) then
       begin
-        if FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          FLog.Add('--' + E.Message)
+        if FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          FLog.Add('Uncaught exception: ' + E.Message);
+          FLog.Add('--' + E.Message);
+        {$endif}
       end;
       Result := nil;
     end;
   end;
 end;
 
-class procedure TJSEngine.callIndexedPropGetter(args: IGetterArgs);
+class procedure TJSEngine.callIndexedObjGetter(args: IGetterArgs);
 var
   ClassDescr: TJSClass;
   Prop: TRttiIndexedProperty;
-  Result: TValue;
-  ReturnType: TypInfo.TTypeKind;
+  PropName: string;
   //debug variables (maybe)
   cl: TClass;
   obj: TObject;
   Eng: TJSEngine;
 begin
-  //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
   if not Assigned(cl) then
-    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling indexed prop getter');
+    Exit;
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
     ClassDescr := Eng.FClasses.Items[cl];
-    Prop := ClassDescr.FDefaultIndexedProp;
+    PropName := PUtf8CharToString(args.GetPropName);
     if cl = Eng.FGlobal.ClassType then
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
+    Prop := ClassDescr.IndexedProps.Items[PropName];
+    //prop pointer will be writed in classtype slot;
+    args.SetGetterResultAsIndexObject(obj, Prop);
+  except
+    on E:Exception do
+    begin
+      if Assigned(eng.FLog) then
+      begin
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
+        else
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
+      end;
+    end;
+  end;
+end;
+
+class procedure TJSEngine.callIndexedPropNumberGetter(args: IGetterArgs);
+var
+  Eng: TJSEngine;
+
+  procedure SetResultAsObject(resul: TValue);
+  var
+    ResObj: TObject;
+    clParent: TClass;
+  begin
+    ResObj := resul.AsObject;
+    if Assigned(ResObj) then
+    begin
+      clParent := ResObj.ClassType;
+      if Assigned(Eng) then
+      begin
+        while (not Eng.ClassIsRegistered(clParent)) and (clParent <> TObject) do
+          clParent := clParent.ClassParent;
+      end;
+        args.SetGetterResult(ResObj, clParent);
+    end;
+  end;
+
+var
+  ClassDescr: TJSClass;
+  ClassTypeSlotItem: TObject;
+  Prop: TRttiIndexedProperty;
+  Result: TValue;
+  cl: TClass;
+  obj: TObject;
+begin
+  Eng := TJSEngine(args.GetEngine);
+  obj := nil;
+  Prop := nil;
+  cl := nil;
+  if not Assigned(Eng) then
+    raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
+  try
+    ClassTypeSlotItem := TObject(args.GetDelphiClasstype);
+    if ClassTypeSlotItem is TClass then
+      cl := TClass(ClassTypeSlotItem);
     try
-      Result := Prop.GetValue(obj, [args.GetPropIndex]);
+      if not Assigned(ClassTypeSlotItem) then
+        raise EScriptEngineException.Create('There is no object in classtype slot');
+      if ClassTypeSlotItem.ClassType = TRttiIndexedProperty then
+      begin
+        //prop pointer was writed in classtype slot;
+        Prop := TRttiIndexedProperty(ClassTypeSlotItem);
+        obj := args.GetDelphiObject;
+      end
+      else if Assigned(cl) then           
+      begin
+        ClassDescr := Eng.FClasses.Items[cl];
+        Prop := ClassDescr.FDefaultIndexedProp;
+        if cl = Eng.FGlobal.ClassType then
+          obj := Eng.FGlobal
+        else
+          obj := args.GetDelphiObject;
+      end;
+      if Assigned(Prop) and Assigned(obj) then
+        Result := Prop.GetValue(obj, [args.GetPropIndex]);
     except
       on E: EVariantTypeCastError do
       begin
@@ -574,77 +641,38 @@ begin
         Exit;
       end;
     end;
-    if Assigned(Prop.PropertyType) then
-    begin
-      ReturnType :=  Prop.PropertyType.TypeKind;
-      case ReturnType of
-        tkUnknown: ;
-        tkInteger: args.SetGetterResult(Result.AsInteger);
-        tkChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkEnumeration: ;
-        tkFloat: args.SetGetterResult(Result.AsExtended);
-        tkString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkSet: ;
-        tkClass: args.SetGetterResult(Result.AsObject, Result.AsObject.ClassType);
-        tkMethod: ;
-        tkWChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkLString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkWString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkVariant: ;
-        tkArray: ;
-        tkRecord:
-        begin
-          Eng.SetRecordIntoContext(Result, Prop.PropertyType, args.GetGetterResultAsRecord);
-          args.SetGetterResultAsRecord;
-        end;
-        tkInterface: ;
-        tkInt64: args.SetGetterResult(Result.AsInteger);
-        tkDynArray: ;
-        tkUString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkClassRef: ;
-        tkPointer: ;//args.SetGetterResult(Result.AsObject, Result.AsObject.ClassType);
-        tkProcedure: ;
-      end;
-    end;
+    Eng.SetResultToArgs(args, Prop.PropertyType, Result);
   except
     on E:Exception do
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
 end;
 
-class procedure TJSEngine.callIndexedPropSetter(args: ISetterArgs);
+class procedure TJSEngine.callIndexedPropNumberSetter(args: ISetterArgs);
 var
-  ClassDescr: TJSClass;
   Prop: TRttiIndexedProperty;
-  //debug variables (maybe)
-  cl: TClass;
   obj: TObject;
   Eng: TJSEngine;
 begin
-  //invoke right method of right object;
-  cl := TClass(args.GetDelphiClasstype);
-  if not Assigned(cl) then
-    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling indexed prop setter');
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
-    ClassDescr := Eng.FClasses.Items[cl];
-    Prop := ClassDescr.FDefaultIndexedProp;
+    //prop pointer will be writed in classtype slot;
+    Prop := TRttiIndexedProperty(args.GetDelphiClasstype);
     if not Prop.IsWritable then
       Exit;
-    if cl = Eng.FGlobal.ClassType then
-      obj := Eng.FGlobal
-    else
-      obj := args.GetDelphiObject;
+    obj := args.GetDelphiObject;
     try
       Prop.SetValue(obj, [args.GetPropIndex], JsValToTValue(args.GetValue, Prop.PropertyType));
     except
@@ -661,10 +689,12 @@ begin
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -719,7 +749,7 @@ begin
           tkUnknown: args.SetGetterResultUndefined;
           tkInteger: args.SetGetterResult(Result.AsInteger);
           tkChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-          tkEnumeration: ;
+          tkEnumeration: args.SetGetterResult(Result.AsOrdinal);
           tkFloat: args.SetGetterResult(Result.AsExtended);
           tkString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
           tkSet: ;
@@ -756,10 +786,12 @@ begin
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -815,7 +847,7 @@ begin
         tkUnknown: args.SetReturnValueUndefined;
         tkInteger: args.SetReturnValue(Result.AsInteger);
         tkChar: args.SetReturnValue(PAnsiChar(UTF8String(Result.AsString)));
-        tkEnumeration: ;
+        tkEnumeration: args.SetReturnValue(Result.AsOrdinal);
         tkFloat: args.SetReturnValue(Result.AsExtended);
         tkString: args.SetReturnValue(PAnsiChar(UTF8String(Result.AsString)));
         tkSet: ;
@@ -847,10 +879,12 @@ begin
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -858,10 +892,8 @@ end;
 
 class procedure TJSEngine.callIntfSetter(args: IIntfSetterArgs);
 var
-  ClassDescr: TJSClass;
   Prop: string;
   Intf: IDispatch;
-  obj: TObject;
   Eng: TJSEngine;
   isProperty: boolean;
   Value: TValue;
@@ -877,10 +909,12 @@ begin
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -921,7 +955,6 @@ var
   ClassDescr: TJSClass;
   Prop: TRttiProperty;
   Result: TValue;
-  ReturnType: TypInfo.TTypeKind;
   //debug variables (maybe)
   cl: TClass;
   obj: TObject;
@@ -930,18 +963,18 @@ begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
   if not Assigned(cl) then
-    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling prop getter');
+    Exit;
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
     ClassDescr := Eng.FClasses.Items[cl];
-    Prop := ClassDescr.FProps.Items[string(args.GetPropName)].prop;
+    Prop := ClassDescr.FProps.Items[PUtf8CharToString(args.GetPropName)].prop;
     if cl = Eng.FGlobal.ClassType then
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
-    helper := ClassDescr.FProps.Items[string(args.GetPropName)].propObj;
+    helper := ClassDescr.FProps.Items[PUtf8CharToString(args.GetPropName)].propObj;
     try
       if Assigned(Helper) then
       begin
@@ -963,47 +996,18 @@ begin
         Exit;
       end;
     end;
-    if Assigned(Prop.PropertyType) then
-    begin
-      ReturnType := Prop.PropertyType.TypeKind;
-      case ReturnType of
-        tkUnknown: ;
-        tkInteger: args.SetGetterResult(Result.AsInteger);
-        tkChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkEnumeration: ;
-        tkFloat: args.SetGetterResult(Result.AsExtended);
-        tkString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkSet: ;
-        tkClass: SetResultAsObject(Result);
-        tkMethod: ;
-        tkWChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkLString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkWString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkVariant: ;
-        tkArray: ;
-        tkRecord:
-        begin
-          Eng.SetRecordIntoContext(Result, Prop.PropertyType, args.GetGetterResultAsRecord);
-          args.SetGetterResultAsRecord;
-        end;
-        tkInterface: SetResultAsIface(Result);
-        tkInt64: args.SetGetterResult(Result.AsInteger);
-        tkDynArray: ;
-        tkUString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
-        tkClassRef: ;
-        tkPointer: ;//args.SetGetterResult(Result.AsObject, Result.AsObject.ClassType);
-        tkProcedure: ;
-      end;
-    end;
+    Eng.SetResultToArgs(args, Prop.PropertyType, Result);
   except
     on E:Exception do
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -1069,10 +1073,10 @@ var
   Helper: TJSClassExtender;
 begin
   //invoke right method of right object;
-  Eng := TJSEngine(args.GetEngine);
   cl := TClass(args.GetDelphiClasstype);
   if not Assigned(cl) then
-    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling method');
+    Exit;
+  Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
@@ -1086,7 +1090,8 @@ begin
     //TODO: Send Info about parameters count mismatch;
     if not Assigned(Method) {or (Length(Method.GetParameters) <> count)} then
       raise EScriptEngineException.Create(
-        Format('there is no overloads for "%s" method, which takes %d param(s)', [string(args.GetMethodName), count]));
+        Format('there is no overloads for "%s" method, which takes %d param(s)',
+        [PUtf8CharToString(args.GetMethodName), count]));
     Parameters := Method.GetParameters;
     SetLength(Valueargs, Length(Parameters));
     SetArgs(Valueargs, count, Parameters);
@@ -1095,6 +1100,8 @@ begin
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
+    if not Assigned(obj) then
+      raise EScriptEngineException.Create('obj not assigned: CallMethod()');
     Helper := MethodInfo.Helper;
     if Assigned(Helper) then
     begin
@@ -1115,7 +1122,7 @@ begin
         tkUnknown: ;
         tkInteger: args.SetReturnValue(Result.AsInteger);
         tkChar: args.SetReturnValue(PAnsiChar(UTF8String(Result.AsString)));
-        tkEnumeration: ;
+        tkEnumeration: args.SetReturnValue(Result.AsOrdinal);
         tkFloat: args.SetReturnValue(Result.AsExtended);
         tkString: args.SetReturnValue(PAnsiChar(UTF8String(Result.AsString)));
         tkSet: ;
@@ -1145,49 +1152,82 @@ begin
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
 end;
 
 class procedure TJSEngine.callPropSetter(args: ISetterArgs);
+
+  procedure SetValueToObject(obj: TObject; value: IValue; Prop: TRttiProperty);
+  var
+    PrevValue: TValue;
+    StringsValue: TStrings;
+    arrayValue: IValuesArray;
+    i: integer;
+  begin
+    if Prop.IsReadable then
+    begin
+      PrevValue := Prop.GetValue(obj);
+      if PrevValue.IsObject and (PrevValue.AsObject is TStrings) then
+      begin
+        StringsValue := (PrevValue.AsObject as TStrings);
+        if value.IsArray then
+        begin
+          arrayValue := value.AsArray;
+          StringsValue.Clear;
+          for i := 0 to arrayValue.GetCount - 1 do
+          begin
+            StringsValue.Add(PUtf8CharToString(arrayValue.GetValue(i).AsString));
+          end;
+          Exit;
+        end;
+      end;
+    end;
+    Prop.SetValue(obj, JsValToTValue(value, Prop.PropertyType));
+  end;
+
 var
   ClassDescr: TJSClass;
   Prop: TRttiProperty;
-  //debug variables (maybe)
   cl: TClass;
   obj: TObject;
   helper: TJSClassExtender;
+//  ResultValue: TValue;
   Eng: TJSEngine;
 begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
   if not Assigned(cl) then
-    raise EScriptEngineException.Create('Can''t get classtype of holder object: calling prop setter');
+    Exit;
   Eng := TJSEngine(args.GetEngine);
   if not Assigned(Eng) then
     raise EScriptEngineException.Create('Engine is not initialized: internal dll error');
   try
     ClassDescr := Eng.FClasses.Items[cl];
-    Prop := ClassDescr.FProps.Items[string(args.GetPropName)].prop;
+    Prop := ClassDescr.FProps.Items[PUtf8CharToString(args.GetPropName)].prop;
     if cl = Eng.FGlobal.ClassType then
       obj := Eng.FGlobal
     else
       obj := args.GetDelphiObject;
-    helper := ClassDescr.FProps.Items[string(args.GetPropName)].propObj;
+    helper := ClassDescr.FProps.Items[PUtf8CharToString(args.GetPropName)].propObj;
     try
+//      ResultValue := JsValToTValue(args.GetValue, Prop.PropertyType);
       if Assigned(Helper) then
       begin
         helper.Source := obj;
-        Prop.SetValue(helper, JsValToTValue(args.GetValue, Prop.PropertyType));
+        SetValueToObject(helper, args.GetValue, Prop);
         Helper.Source := nil;
       end
       else
-        Prop.SetValue(obj, JsValToTValue(args.GetValue, Prop.PropertyType));
+        SetValueToObject(obj, args.GetValue, Prop);
+//      Eng.SetResultToArgs(args, Prop.PropertyType, ResultValue);
     except
       on E: EVariantTypeCastError do
         Exit;
@@ -1202,10 +1242,12 @@ begin
     begin
       if Assigned(eng.FLog) then
       begin
-        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) >= 0 then
-          eng.FLog.Add('--' + E.Message)
+        if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
+          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        {$ifdef DEBUG}
         else
-          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          eng.FLog.Add('--' + E.Message);
+        {$endif}
       end;
     end;
   end;
@@ -1237,12 +1279,13 @@ begin
   FEngine.SetPropSetterCallBack(callPropSetter);
   FEngine.SetFieldGetterCallBack(callFieldGetter);
   FEngine.SetFieldSetterCallBack(callFieldSetter);
-  FEngine.SetIndexedPropGetterCallBack(callIndexedPropGetter);
-  FEngine.SetIndexedPropSetterCallBack(callIndexedPropSetter);
+  FEngine.SetIndexedPropGetterCallBack(callIndexedPropNumberGetter);
+  FEngine.SetIndexedPropSetterCallBack(callIndexedPropNumberSetter);
   FEngine.SetInterfaceGetterCallBack(callIntfGetter);
   FEngine.SetInterfaceSetterCallBack(callIntfSetter);
   FEngine.SetInterfaceMethodCallBack(callIntfMethod);
   FEngine.SetErrorMessageCallBack(SendErrToLog);
+  FEngine.SetIndexedPropGetterObjCallBack(callIndexedObjGetter);
 end;
 
 destructor TJSEngine.Destroy;
@@ -1314,15 +1357,15 @@ begin
   end;
 end;
 
-function TJSEngine.RunFile(fileName, appPath: string): string;
+function TJSEngine.RunFile(fileName, scriptPath: string): string;
 var
   RawByteStr: RawByteString;
   CharPtr: PAnsiChar;
-  AppDir: string;
+  ScriptDir: string;
 begin
-  AppDir := ExtractFilePath(appPath);
+  ScriptDir := ExtractFilePath(scriptPath);
   try
-    FScriptName := TPath.Combine(AppDir, fileName);
+    FScriptName := TPath.Combine(ScriptDir, fileName);
   except
     on E: EArgumentException do
     begin
@@ -1333,10 +1376,10 @@ begin
   Result := '';
   RawByteStr := UTF8Encode(FScriptName);
   FEngine.SetDebug(Debug);
-  FAppPath := appPath;
-  CharPtr := FEngine.RunFile(PansiChar(RawByteStr), PansiChar(UTF8String(appPath)));
+  FAppPath := scriptPath;
+  CharPtr := FEngine.RunFile(PansiChar(RawByteStr), PansiChar(UTF8String(scriptPath)));
   if Assigned(CharPtr) then
-    Result := string(CharPtr);
+    Result := PUtf8CharToString(CharPtr);
   Result := '';
 end;
 
@@ -1345,15 +1388,20 @@ begin
   FEngine.AddIncludeCode(PAnsiChar(code));
 end;
 
+function TJSEngine.RunIncludeCode(code: string): string;
+begin
+  Result := PUtf8CharToString(FEngine.RunIncludeCode(PAnsiChar(UTF8String(code))));
+end;
+
 function TJSEngine.RunIncludeFile(FileName: string): string;
 var
-  Utf8Str: UTF8String;
+  Utf8StrCode: UTF8String;
   CharPtr: PAnsiChar;
-  ScriptFullPath: string;
+  ScriptFullName, Code: string;
 begin
   Result := '';
   try
-    ScriptFullPath := TPath.Combine(ExtractFilePath(FScriptName), FileName);
+    ScriptFullName := TPath.Combine(ExtractFilePath(FScriptName), FileName);
   except
     on E: EArgumentException do
     begin
@@ -1361,29 +1409,34 @@ begin
       Exit('Include file: ' + E.Message);
     end;
   end;
-  Utf8Str := UTF8String(ScriptFullPath);
+  Code := TFile.ReadAllText(ScriptFullName);
+  Utf8StrCode := UTF8String(Code);
   try
-    CharPtr := FEngine.RunIncludeFile(PansiChar(Utf8Str));
+    CharPtr := FEngine.RunIncludeCode(PAnsiChar(Utf8StrCode));
     if Assigned(CharPtr) then
-        Result := string(CharPtr);
+        Result := PUtf8CharToString(CharPtr);
   except
     on e: Exception do
       Result := 'File couldn''t be included: internal node error';
   end;
 end;
 
-function TJSEngine.RunScript(code, appPath: string): string;
+function TJSEngine.RunScript(code, scriptName: string): TValue;
 var
   codeStr: UTF8String;
-  CharPtr: PAnsiChar;
+  resValue: IValue;
+  scriptPath: string;
 begin
-  Result := '';
+  Result := TValue.Empty;
   codeStr := UTF8String(code);
-  FScriptName := appPath;
+  FScriptName := scriptName;
+  scriptPath := ExtractFilePath(scriptName);
+  scriptName := ExtractFileName(scriptName);
   FEngine.SetDebug(Debug);
-  CharPtr := FEngine.RunString(PansiChar(codeStr), PansiChar(UTF8String(appPath)));
-  if Assigned(CharPtr) then
-    Result := PUtf8CharToString(CharPtr);
+  resValue := FEngine.RunString(PansiChar(codeStr),
+    PansiChar(UTF8String(scriptName)), PAnsiChar(UTF8String(scriptPath)));
+  if Assigned(resValue) then
+    Result := JsValToTValue(resValue);
 end;
 
 class procedure TJSEngine.SendErrToLog(errMsg: PAnsiChar; eng: TObject);
@@ -1394,7 +1447,7 @@ begin
   begin
     engine := eng as TJSEngine;
     if Assigned(engine.FLog) then
-      engine.FLog.Add(UTF8ToUnicodeString(RawByteString(errMsg)));
+      engine.FLog.Add(UTF8ToUnicodeString(RawByteString(errMsg)))
   end;
 end;
 
@@ -1423,6 +1476,8 @@ var
   PropPair: TPair<string, TPropInfo>;
   field: TRttiField;
   FieldPair: TPair<string, TRttiField>;
+  IndProp: TRttiIndexedProperty;
+  IndPropPair: TPair<string, TRttiIndexedProperty>;
   i: integer;
   helper: TJSClassExtender;
   clParent: TClass;
@@ -1503,6 +1558,12 @@ begin
         if (field.FieldType.TypeKind = tkEnumeration) then
           AddEnumToGlobal(field.FieldType, FGlobalTemplate);
       end;
+    end;
+    for IndPropPair in cl.IndexedProps do
+    begin
+      IndProp := IndPropPair.Value;
+      objTempl.SetIndexedProp(PAnsiChar(UTF8String(IndProp.Name)), nil,
+        IndProp.IsReadable, IndProp.IsWritable);
     end;
     objTempl.SetHasIndexedProps(cl.FIndexedProps.Count > 0);
     cl.Initialized := True;
@@ -1603,9 +1664,194 @@ begin
   end;
 end;
 
+procedure TJSEngine.SetResultToArgs(args: ISetterArgs; ResultType: TRttiType;
+  Result: TValue);
+
+  procedure SetResultAsObject(resul: TValue);
+  var
+    ResObj: TObject;
+    clParent: TClass;
+  begin
+    ResObj := resul.AsObject;
+    if Assigned(ResObj) then
+    begin
+      clParent := ResObj.ClassType;
+      while (not ClassIsRegistered(clParent)) and (clParent <> TObject) do
+        clParent := clParent.ClassParent;
+      args.SetResult(ResObj, clParent);
+    end
+    else
+      args.SetResultUndefined;
+  end;
+
+  procedure SetResultAsIface(resul: TValue);
+  var
+    ResDispatch: IDispatch;
+  begin
+    ResDispatch := TValueToDispatch(resul);
+    FDispatchList.Add(ResDispatch);
+    args.SetResultIntf(Pointer(ResDispatch));
+  end;
+
+var
+  ReturnType: TypInfo.TTypeKind;
+begin
+  if Assigned(ResultType) then
+  begin
+    ReturnType := ResultType.TypeKind;
+    case ReturnType of
+      tkUnknown: ;
+      tkInteger: args.SetResult(Result.AsInteger);
+      tkChar: args.SetResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkEnumeration: args.SetResult(Result.AsOrdinal);
+      tkFloat: args.SetResult(Result.AsExtended);
+      tkString: args.SetResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkSet: ;
+      tkClass: SetResultAsObject(Result);
+      tkMethod: ;
+      tkWChar: args.SetResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkLString: args.SetResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkWString: args.SetResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkVariant: ;
+      tkArray: ;
+      tkRecord:
+      begin
+        SetRecordIntoContext(Result, ResultType, args.GetResultAsRecord);
+        args.SetResultAsRecord;
+      end;
+      tkInterface: SetResultAsIface(Result);
+      tkInt64: args.SetResult(Result.AsInteger);
+      tkDynArray: ;
+      tkUString: args.SetResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkClassRef: ;
+      tkPointer: ;//args.SetGetterResult(Result.AsObject, Result.AsObject.ClassType);
+      tkProcedure: ;
+    end;
+  end;
+
+end;
+
+procedure TJSEngine.SetResultToArgs(args: IGetterArgs; ResultType: TRttiType;
+  Result: TValue);
+
+  procedure SetResultAsObject(resul: TValue);
+  var
+    ResObj: TObject;
+    clParent: TClass;
+  begin
+    ResObj := resul.AsObject;
+    if Assigned(ResObj) then
+    begin
+      clParent := ResObj.ClassType;
+      while (not ClassIsRegistered(clParent)) and (clParent <> TObject) do
+        clParent := clParent.ClassParent;
+      args.SetGetterResult(ResObj, clParent);
+    end;
+  end;
+
+  procedure SetResultAsIface(resul: TValue);
+  var
+    ResDispatch: IDispatch;
+  begin
+    ResDispatch := TValueToDispatch(resul);
+    FDispatchList.Add(ResDispatch);
+    args.SetGetterResultIntf(Pointer(ResDispatch));
+  end;
+
+var
+  ReturnType: TypInfo.TTypeKind;
+begin
+  if Assigned(ResultType) then
+  begin
+    ReturnType := ResultType.TypeKind;
+    case ReturnType of
+      tkUnknown: ;
+      tkInteger: args.SetGetterResult(Result.AsInteger);
+      tkChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkEnumeration: args.SetGetterResult(Result.AsOrdinal);
+      tkFloat: args.SetGetterResult(Result.AsExtended);
+      tkString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkSet: ;
+      tkClass: SetResultAsObject(Result);
+      tkMethod: ;
+      tkWChar: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkLString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkWString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkVariant: ;
+      tkArray: ;
+      tkRecord:
+      begin
+        SetRecordIntoContext(Result, ResultType, args.GetGetterResultAsRecord);
+        args.SetGetterResultAsRecord;
+      end;
+      tkInterface: SetResultAsIface(Result);
+      tkInt64: args.SetGetterResult(Result.AsInteger);
+      tkDynArray: ;
+      tkUString: args.SetGetterResult(PAnsiChar(UTF8String(Result.AsString)));
+      tkClassRef: ;
+      tkPointer: ;//args.SetGetterResult(Result.AsObject, Result.AsObject.ClassType);
+      tkProcedure: ;
+    end;
+  end;
+end;
+
 { TJSClass }
 
 procedure TJSClass.AddHelper(helper: TJSClassExtender);
+
+  function SimilarParams(Param1, Param2: TArray<TRttiParameter>): boolean;
+  var
+    i: integer;
+  begin
+    Result := Length(Param1) = Length(Param2);
+    if (Result) then
+    begin
+      for i := 0 to Length(Param1) - 1 do
+        if Param1[i].ParamType.TypeKind <> Param2[i].ParamType.TypeKind then
+        begin
+          Result := False;
+          break;
+        end;
+    end;
+  end;
+
+  function AssignHelperToSimilarMethod(overloads: TMethodOverloadMap;
+    Method: TRttiMethod): boolean;
+  var
+    MethodInfo: TRttiMethodInfo;
+    i: integer;
+  begin
+    Result := False;
+    if Assigned(overloads.OverloadsInfo) then
+    begin
+      for i := 0 to overloads.OverloadsInfo.Count - 1 do
+      begin
+        MethodInfo := overloads.OverloadsInfo[i];
+        if (MethodInfo.Method.Name = Method.Name) and
+          (SimilarParams(MethodInfo.Method.GetParameters, Method.GetParameters)) then
+        begin
+          MethodInfo.Method := Method;
+          MethodInfo.Helper := helper;
+          overloads.OverloadsInfo[i] := MethodInfo;
+          Result := True;
+          break;
+        end;
+      end;
+    end
+    else
+    begin
+      MethodInfo := overloads.MethodInfo;
+      if Assigned(MethodInfo.Method) and
+        SimilarParams(MethodInfo.Method.GetParameters, Method.GetParameters) then
+      begin
+        MethodInfo.Method := Method;
+        MethodInfo.Helper := helper;
+        overloads.MethodInfo := MethodInfo;
+        Result := True;
+      end;
+    end;
+  end;
+
 var
   MethodArr: TArray<TRttiMethod>;
   overloads: TMethodOverloadMap;
@@ -1627,23 +1873,26 @@ begin
     begin
       if not FMethods.TryGetValue(method.Name, overloads) then
       begin
-        overloads := TMethodOverloadMap.Create;
-        FMethods.Add(method.Name, overloads);
-        overloads.MethodInfo.Method := method;
-        overloads.MethodInfo.Helper := helper;
+          overloads := TMethodOverloadMap.Create;
+          FMethods.Add(method.Name, overloads);
+          overloads.MethodInfo.Method := method;
+          overloads.MethodInfo.Helper := helper;
       end
       else
       begin
-        if Assigned(overloads.MethodInfo.Method) then
+        if not AssignHelperToSimilarMethod(overloads, method) then
         begin
-          overloads.OverloadsInfo := TRttiMethodList.Create;
-          overloads.OverloadsInfo.Add(overloads.MethodInfo);
-          overloads.MethodInfo.Method := nil;
-          overloads.MethodInfo.Helper := helper;          
+          if Assigned(overloads.MethodInfo.Method) then
+          begin
+            overloads.OverloadsInfo := TRttiMethodList.Create;
+            overloads.OverloadsInfo.Add(overloads.MethodInfo);
+            overloads.MethodInfo.Method := nil;
+            overloads.MethodInfo.Helper := helper;
+          end;
+          methodInfo.Method := method;
+          methodInfo.Helper := helper;
+          overloads.OverloadsInfo.Add(methodInfo);
         end;
-        methodInfo.Method := method;
-        methodInfo.Helper := helper;
-        overloads.OverloadsInfo.Add(methodInfo);
       end;
     end;
   end;

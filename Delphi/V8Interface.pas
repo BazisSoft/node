@@ -110,6 +110,7 @@ type
     procedure SetGetterResult(val: boolean); overload; virtual; stdcall; abstract;
     procedure SetGetterResult(val: PAnsiChar); overload; virtual; stdcall; abstract;
     procedure SetGetterResult(val: Double); overload; virtual; stdcall; abstract;
+    procedure SetGetterResultAsIndexObject(ParentObj: TObject; RttiProp: TObject); virtual; stdcall; abstract;
     procedure SetGetterResultAsRecord; virtual; stdcall; abstract;
     function GetGetterResultAsRecord: IRecord; virtual; stdcall; abstract;
 
@@ -129,6 +130,18 @@ type
     function GetValueAsBool: boolean; overload; virtual; stdcall; abstract;
     function GetValueAsString: PAnsiChar; overload; virtual; stdcall; abstract;
     function GetValueAsDouble: double; overload; virtual; stdcall; abstract;
+
+    procedure SetResultUndefined; virtual; stdcall; abstract;
+    procedure SetResultIntf(p: Pointer); virtual; stdcall; abstract;
+    procedure SetResultAsIntfFunction(intf: Pointer; funcName: PAnsiChar); virtual; stdcall; abstract;
+    procedure SetResult(obj: Pointer; dClasstype: Pointer); overload; virtual; stdcall; abstract;
+    procedure SetResult(val: integer); overload; virtual; stdcall; abstract;
+    procedure SetResult(val: boolean); overload; virtual; stdcall; abstract;
+    procedure SetResult(val: PAnsiChar); overload; virtual; stdcall; abstract;
+    procedure SetResult(val: Double); overload; virtual; stdcall; abstract;
+    procedure SetResultAsIndexObject(ParentObj: TObject; RttiProp: TObject); virtual; stdcall; abstract;
+    procedure SetResultAsRecord; virtual; stdcall; abstract;
+    function GetResultAsRecord: IRecord; virtual; stdcall; abstract;
 
     procedure SetError(errorType: PAnsiChar); virtual; stdcall; abstract;
   end;
@@ -163,6 +176,7 @@ type
   IObjectTemplate = class (IEngineIntf)
     procedure SetMethod(methodName: PAnsiChar; MethodCall: Pointer); virtual; stdcall; abstract;
     procedure SetProp(propName: PAnsiChar; propObj: Pointer; read, write: boolean); virtual; stdcall; abstract;
+    procedure SetIndexedProp(propName: PAnsiChar; propObj: Pointer; read, write: boolean); virtual; stdcall; abstract;
     procedure SetField(fieldNAme: PAnsiChar); virtual; stdcall; abstract;
     procedure SetEnumField(fieldName: PAnsiChar; fieldValue: Integer); virtual; stdcall; abstract;
     procedure SetHasIndexedProps(HAsIndexedProps: boolean); virtual; stdcall; abstract;
@@ -174,7 +188,7 @@ type
     function AddObject(classtype: PAnsiChar; dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function GetObject(dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function ClassIsRegistered(dClass: Pointer): boolean; virtual; stdcall; abstract;
-    function RunString(code, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
+    function RunString(code, ScriptName, ScriptPath: PAnsiChar): IValue; virtual; stdcall; abstract;
     function RunFile(fileName, ExeName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunIncludeFile(fileName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunIncludeCode(code: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
@@ -187,6 +201,7 @@ type
     procedure SetPropSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
     procedure SetFieldGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
     procedure SetFieldSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
+    procedure SetIndexedPropGetterObjCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
     procedure SetIndexedPropSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
     procedure SetInterfaceGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;

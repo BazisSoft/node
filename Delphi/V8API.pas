@@ -144,9 +144,6 @@ begin
 end;
 
 function TJSCallback.Call(const Params: array of TValue): boolean;
-var
-  k: Integer;
-  Func: IFunction;
 begin
   Result := False;
   if Assigned(FVal) then
@@ -154,27 +151,6 @@ begin
     FCallResult := FVal.Call(Params);
     Result := True;
   end;
-//  Result := False;
-//  FCallResult := nil;
-//  if Assigned(FVal) then
-//  begin
-//    //set params to func
-//    Func := FVal.Value.AsFunction;
-//    for k := 0 to High(Params) do
-//    begin
-//      if not Assigned(Params[k].TypeInfo) then
-//        continue;
-//      case Params[k].TypeInfo.Kind of
-//        tkInteger: Func.AddArg(Params[k].AsInteger);
-//        tkFloat: Func.AddArg(Params[k].AsExtended);
-//        tkString: Func.AddArg(PAnsiChar(UTF8String(Params[k].AsString)));
-//        tkClass: Func.AddArg(Params[k].AsObject);
-//        tkEnumeration: Func.AddArg(Params[k].AsBoolean);
-//      end;
-//    end;
-//    //call func
-//    FCallResult :=  Func.CallFunction;
-//  end;
 end;
 
 procedure TJSCallback.SetFunction(value: ICallableMethod);
@@ -322,7 +298,6 @@ end;
 
   function JSvalToCallBackRecord(val: jsval; typ: TRttiType): TValue;
   var
-    ref: Pointer;
     MethodArr: TArray<TRttiMethod>;
     method, rightMethod: TRttiMethod;
     callBack: ICallableMethod;
@@ -350,8 +325,9 @@ end;
   var
     TypeKind: TypInfo.TTypeKind;
     str1: RawByteString;
+    obj: IObject;
   begin
-    Result := '';
+    Result := TValue.Empty;
     if not Assigned(typ) then
       Exit;
     TypeKind := typ.TypeKind;
@@ -365,8 +341,11 @@ end;
       tkSet: ;
       tkClass:
       begin
-        if val.AsObject.IsDelphiObject then
+        obj := val.AsObject;
+        if Assigned(obj) and obj.IsDelphiObject then
           Result := TValue.From<TObject>(val.AsObject.GetDelphiObject)
+        else
+          Result := nil;
       end;
       tkMethod: ;
       tkWChar: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
@@ -405,7 +384,7 @@ end;
       tkUnknown: ;
       tkInteger: Result := 0;
       tkChar: Result := '';
-      tkEnumeration: Result := 0;
+      tkEnumeration: Result := TValue.FromOrdinal(typ.Handle, 0);
       tkFloat: Result := 0.0;
       tkString: Result := '';
       tkSet: ;
@@ -454,8 +433,8 @@ end;
 
   function TValueToJSValue(val: TValue; typ: TRttiType; JSVal: IValue): boolean;
   begin
-    Result := False;
      //todo
+    raise EScriptEngineException.Create('don''t use uncompleted methods');
   end;
 
   function TValueToJSValue(val: TValue; Eng: IEngine): IValue; overload;
@@ -511,7 +490,6 @@ end;
     initValue: TValue;
     resValue: IValue;
   begin
-    result := False;
     count := Length(initArray);
     if count > resArray.GetCount then
       raise EScriptEngineException.Create('Result array count is less than init array count');
@@ -568,7 +546,6 @@ end;
     ParamCount: Integer;
     DispIDNamed: Longint;
     CallFlags: Word;
-    pVarArg: PVariantArgList;
     WriteProp: boolean;
     VariantVal: OleVariant;
   begin
@@ -577,7 +554,6 @@ end;
     IsProperty := True;
     wide := PropName;
     ParamCount := 0;
-    pVarArg := nil;
     // get dispid of requested method
     if not succeeded(TargetObj.GetIDsOfNames(GUID_NULL, @wide, 1, 0, @disps)) then
       raise Exception.Create('This object does not support this method');
@@ -634,9 +610,6 @@ end;
     dispParams: TDispParams;
     aexception: TExcepInfo;
     res: HResult;
-    CallFlags: Word;
-    DispIDNamed: Longint;
-    pVarArg: PVariantArgList;
     ParamCount: Integer;
     i: integer;
     params: array of OleVariant;
@@ -649,7 +622,6 @@ end;
       Params[i] := paramValues[i].AsVariant;
     end;
     wide := FuncName;
-    pVarArg := nil;
     // get dispid of requested method
     if not succeeded(TargetObj.GetIDsOfNames(GUID_NULL, @wide, 1, 0, @disps)) then
       raise Exception.Create('This object does not support this method');
@@ -659,7 +631,6 @@ end;
       dispparams.rgvarg := @Params[0]
     else
       dispparams.rgvarg := nil;
-    //dispparams.rgvarg := pVarArg;
     dispparams.rgdispidNamedArgs := nil;
     dispparams.cArgs := ParamCount;
     dispparams.cNamedArgs := 0;

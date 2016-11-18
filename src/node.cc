@@ -139,6 +139,7 @@ static bool throw_deprecation = false;
 static bool trace_sync_io = false;
 static bool track_heap_objects = false;
 static const char* eval_string = nullptr;
+static const char * filename_string = nullptr;
 static unsigned int preload_module_count = 0;
 static const char** preload_modules = nullptr;
 #if HAVE_INSPECTOR
@@ -3160,6 +3161,13 @@ void SetupProcessObject(Environment* env,
                       String::NewFromUtf8(env->isolate(), eval_string));
   }
 
+  ////
+  if (filename_string) {
+    READONLY_PROPERTY(process,
+                      "_filename",
+                      String::NewFromUtf8(env->isolate(), filename_string));
+  }
+
   // -p, --print
   if (print_eval) {
     READONLY_PROPERTY(process, "_print_eval", True(env->isolate()));
@@ -3720,6 +3728,11 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--expose-internals") == 0 ||
                strcmp(arg, "--expose_internals") == 0) {
       // consumed in js
+    ////make node-delphi 'filename' arg
+    } else if (strcmp(arg, "-f") == 0){
+        args_consumed += 1;
+        filename_string = argv[index + 1];
+    //*/
     } else {
       // V8 option.  Pass through as-is.
       new_v8_argv[new_v8_argc] = arg;
@@ -4475,10 +4488,6 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 	  }
 	  ////make enter manually without Context::Scope, and context will exit when delphi engine will be destroyed;	
 	  context->Enter();
-	  if (eng) {
-		  IEngine	* engine = static_cast<IEngine *>(eng);
-		  engine->ExecIncludeCode(context);
-	  }
 	  auto env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
 	  env_wrapper_ptr = env_wrapper;
 	  Environment *env = env_wrapper->GetEnvironment();
@@ -4506,6 +4515,12 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 	  // Enable debugger
 	  if (instance_data->use_debug_agent())
 		  EnableDebug(env);
+
+	  if (eng) {
+		  //execution of 'pre-code'
+		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  engine->ExecIncludeCode(context);
+	  }
 
 	  {
 		  SealHandleScope seal(node_engine_isolate);

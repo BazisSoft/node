@@ -218,10 +218,23 @@ public:
 	virtual char * APIENTRY GetValueAsString();
 	virtual double APIENTRY GetValueAsDouble();
 
+	virtual void APIENTRY SetGetterResultUndefined();
+	virtual void APIENTRY SetGetterResultIFace(void * value);
+	virtual void APIENTRY SetGetterResultAsInterfaceFunction(void * intf, char * funcName);
+	virtual void APIENTRY SetGetterResultDObject(void * value, void* dClasstype);
+	virtual void APIENTRY SetGetterResultInt(int val);
+	virtual void APIENTRY SetGetterResultBool(bool val);
+	virtual void APIENTRY SetGetterResultString(char * val);
+	virtual void APIENTRY SetGetterResultDouble(double val);
+	virtual void APIENTRY SetGetterResultAsIndexObject(void * parentObj, void* rttiProp);
+	virtual void APIENTRY SetGetterResultAsRecord();
+	virtual IRecord * APIENTRY GetGetterResultAsRecord();
+
 	virtual void APIENTRY SetError(char * errorMsg);
 	std::string error = "";
 private:
 	v8::Isolate * iso = nullptr;
+	IRecord * recVal = nullptr;
 	bool IsIndexedProp = false;
 	std::string propName = "";
 	int propInd = -1;
@@ -334,7 +347,7 @@ public:
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);
 	virtual bool APIENTRY ClassIsRegistered(void * dClass);
-	virtual IValue * APIENTRY RunString(char * code, char * exeName);
+	virtual IValue * APIENTRY RunString(char * code, char * scriptName, char * scriptPath);
 	virtual char * APIENTRY RunFile(char * fName, char * exeName);
 	virtual char * APIENTRY RunIncludeFile(char * fName);
 	virtual char * APIENTRY RunIncludeCode(char * code);
