@@ -194,7 +194,7 @@ type
     function RunIncludeCode(code: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     procedure AddIncludeCode(code: PAnsiChar); virtual; stdcall; abstract;
     function CallFunc(FuncName: PAnsiChar; args: IValuesArray): IValue; virtual; stdcall; abstract;
-    procedure SetDebug(debug: boolean); virtual; stdcall; abstract;
+    procedure SetDebug(debug: boolean; arg: PAnsiChar); virtual; stdcall; abstract;
     function ErrorCode: integer; virtual; stdcall; abstract;
     procedure SetMethodCallBack(callBack: TMethodCallBack); virtual; stdcall; abstract;
     procedure SetPropGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;

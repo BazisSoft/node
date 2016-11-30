@@ -353,7 +353,7 @@ public:
 	virtual char * APIENTRY RunIncludeCode(char * code);
 	virtual void APIENTRY AddIncludeCode(char * code);
 	virtual IValue * APIENTRY CallFunc(char * funcName, IValueArray * args);
-	virtual void APIENTRY SetDebug(bool debug);
+	virtual void APIENTRY SetDebug(bool debug, char * arg);
 	bool DebugMode();
 	virtual int APIENTRY ErrorCode();
 	void SetErrorCode(int code);
@@ -424,6 +424,7 @@ private:
 	TMethodCallBack IFaceMethodCall;
 	TErrorMsgCallBack ErrMsgCallBack;
 	bool debugMode = false;
+    char * debugArg = nullptr;
 	int errCode = 0;
 	IValue * func_result;
 

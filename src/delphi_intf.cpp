@@ -83,8 +83,7 @@ std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& ar
 	static char* arg1 = "";
 	static char* arg2 = "";
 	if (DebugMode()) {
-		arg0 = "--debug-brk";
-		args.push_back(arg0);
+		args.push_back(debugArg);
 		arg2 = "--nolazy";
 		args.push_back(arg2);
 		argc += 2;
@@ -100,8 +99,8 @@ std::vector<char *> IEngine::MakeArgs(char * codeParam, bool isFileName, int& ar
 			arg0 = codeParam;
 			args.push_back(arg0);
             args.push_back("-f");
-            arg2 = scriptName;
-            args.push_back(arg2);
+            arg1 = scriptName;
+            args.push_back(arg1);
             argc += 4;
 		}
 	}
@@ -294,9 +293,10 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 	return nullptr;
 }
 
-void IEngine::SetDebug(bool debug)
+void IEngine::SetDebug(bool debug, char * arg)
 {
 	debugMode = debug;
+    debugArg = arg;
 }
 
 bool IEngine::DebugMode()

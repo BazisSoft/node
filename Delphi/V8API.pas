@@ -235,7 +235,7 @@ end;
 
   function JsValToTValue(val: jsval): TValue;
   begin
-    if not Assigned(val) then
+    if not assigned(val) then
       Exit(TValue.Empty);
     //checking for type
     if val.IsBool then
