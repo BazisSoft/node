@@ -4579,8 +4579,30 @@ void NodeEngine::StopNodeInstance() {
 	CHECK_NE(node_engine_isolate, nullptr);
 	delete static_cast<EnvWrapeer *>(env_wrapper_ptr);
 	delete static_cast<IsolateDataWrapper *>(iso_data_wrapper_ptr);
-	//delete static_cast<ScriptParams *>(script_params_ptr);
+
 	node_started = false;
+
+    //set static vars to default
+    print_eval = false;
+    force_repl = false;
+    syntax_check_only = false;
+    trace_deprecation = false;
+    throw_deprecation = false;
+    trace_sync_io = false;
+    track_heap_objects = false;
+    eval_string = nullptr;
+    filename_string = nullptr;
+    preload_module_count = 0;
+    preload_modules = nullptr;
+    use_debug_agent = false;
+    debug_wait_connect = false;
+    debug_port = 5858;
+    inspector_port = 9229;
+    v8_thread_pool_size = v8_default_thread_pool_size;
+    prof_process = false;
+    v8_is_profiling = false;
+    node_is_initialized = false;
+
 }
 
 int NodeEngine::Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
