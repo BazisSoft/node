@@ -63,6 +63,13 @@ private:
 	bool isDObject = false;
 };
 
+struct AsyncFuncData {
+    v8::Isolate * iso;
+    v8::Persistent<v8::Function> func;
+    std::vector<v8::Local<v8::Value>> * argv;
+    IValue * returnVal;
+};
+
 class IFunction : public IBazisIntf {
 public:
 	IFunction(v8::Local<v8::Function> function, v8::Isolate * isolate);
@@ -71,6 +78,7 @@ public:
 	virtual void APIENTRY AddArgAsString(char* val);
 	virtual void APIENTRY AddArgAsNumber(double val);
 	virtual void APIENTRY AddArgAsObject(void * value, void * classtype);
+    static void AsyncAction(uv_idle_t * handle);
 	virtual IValue * APIENTRY CallFunction();
 private:
 	v8::Isolate * iso = nullptr;

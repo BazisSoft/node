@@ -5,6 +5,7 @@
 #include <fstream>
 #include <streambuf>
 #include <regex>
+#include "uv.h"
 
 namespace Bv8 {
 
@@ -313,7 +314,7 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 	v8::Isolate::Scope scope(isolate);
 	auto context = isolate->GetCurrentContext();
 	auto glo = context->Global();
-	v8::Locker locker(isolate);
+
 	auto maybe_val = glo->Get(context, v8::String::NewFromUtf8(isolate, funcName, v8::NewStringType::kNormal).ToLocalChecked());
 	if (!maybe_val.IsEmpty()) {
 		auto val = maybe_val.ToLocalChecked();
@@ -1964,9 +1965,61 @@ void IFunction::AddArgAsObject(void * value, void * classtype)
 	}
 }
 
+void IFunction::AsyncAction(uv_idle_t * handle)
+{
+    auto data = static_cast<AsyncFuncData *>(handle->data);
+    auto iso = data->iso;
+    if (iso) {
+        //v8::Unlocker unlocker(iso);
+        //v8::Locker locker(iso);
+        v8::Isolate::Scope scope(iso);
+        v8::HandleScope hScope(iso);
+        v8::Persistent<v8::Function> func;
+        func.Reset(iso, data->func.Get(iso));
+        //auto func = data->func;
+        auto returnVal = data->returnVal;
+        auto argv = *(data->argv);
+
+        auto res = func.Get(iso)->Call(iso->GetCurrentContext(), func.Get(iso), argv.size(), argv.data());
+        if (!res.IsEmpty()) {
+            returnVal = new IValue(iso, res.ToLocalChecked(), 0);
+            argv.clear();
+            data->returnVal = returnVal;
+        }
+        else {
+            data->returnVal = nullptr;
+        }
+    }
+    uv_stop(handle->loop);
+}
+
 IValue * IFunction::CallFunction()
 {
-	v8::Isolate::Scope scope(iso);
+    AsyncFuncData * data = new AsyncFuncData();
+    data->argv = &argv;
+    //data->func = func;
+    {
+        v8::Isolate::Scope scope(iso);
+        data->func.Reset(iso, func.Get(iso));
+    }
+    data->iso = iso;
+    if (returnVal)
+        returnVal->Delete();
+    data->returnVal = returnVal;
+
+    /*uv_work_t * req = new uv_work_t();
+    req->data = data;*/
+    uv_loop_t * loop = static_cast<uv_loop_t *>(malloc(sizeof(uv_loop_t)));
+    uv_loop_init(loop);
+
+    uv_idle_t idler;
+    idler.data = data;
+    uv_idle_init(loop, &idler);
+    uv_idle_start(&idler, AsyncAction);
+
+    uv_run(loop, UV_RUN_DEFAULT);
+    //uv_stop(loop);
+	/*v8::Isolate::Scope scope(iso);
 	if (returnVal){
 		returnVal->Delete();
 		returnVal = nullptr;
@@ -1978,7 +2031,10 @@ IValue * IFunction::CallFunction()
 		return returnVal;
 	}
 	else
-		return nullptr;
+		return nullptr;*/
+    returnVal = data->returnVal;
+    uv_loop_close(loop);
+    return returnVal;
 }
 
 IIntfSetterArgs::IIntfSetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, char * prop, v8::Local<v8::Value> newValue)
