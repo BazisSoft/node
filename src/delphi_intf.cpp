@@ -1990,36 +1990,52 @@ void IFunction::AsyncAction(uv_idle_t * handle)
             data->returnVal = nullptr;
         }
     }
-    uv_stop(handle->loop);
+    //uv_stop(handle->loop);
 }
 
 IValue * IFunction::CallFunction()
 {
-    AsyncFuncData * data = new AsyncFuncData();
-    data->argv = &argv;
-    //data->func = func;
-    {
-        v8::Isolate::Scope scope(iso);
-        data->func.Reset(iso, func.Get(iso));
-    }
-    data->iso = iso;
-    if (returnVal)
-        returnVal->Delete();
-    data->returnVal = returnVal;
+    //AsyncFuncData * data = new AsyncFuncData();
+    //data->argv = &argv;
+    ////data->func = func;
+    //{
+    //    v8::Isolate::Scope scope(iso);
+    //    data->func.Reset(iso, func.Get(iso));
+    //}
+    //data->iso = iso;
+    //if (returnVal)
+    //    returnVal->Delete();
+    //data->returnVal = returnVal;
 
-    /*uv_work_t * req = new uv_work_t();
-    req->data = data;*/
-    uv_loop_t * loop = static_cast<uv_loop_t *>(malloc(sizeof(uv_loop_t)));
-    uv_loop_init(loop);
+    //uv_work_t * req = new uv_work_t();
+    //req->data = data;
+    //uv_loop_t * loop = static_cast<uv_loop_t *>(malloc(sizeof(uv_loop_t)));    
+    //uv_loop_init(loop);
+    //auto loop = uv_default_loop();
 
-    uv_idle_t idler;
-    idler.data = data;
-    uv_idle_init(loop, &idler);
-    uv_idle_start(&idler, AsyncAction);
+    //uv_idle_t idler;
+    //idler.data = data;
+    //uv_idle_init(loop, &idler);
+    //uv_idle_start(&idler, AsyncAction);
+    //
+    //bool more;
+    //do {
+    //    more = uv_run(loop, UV_RUN_ONCE);
 
-    uv_run(loop, UV_RUN_DEFAULT);
+    //    if (more == false) {
+    //        //EmitBeforeExit(env);
+
+    //        // Emit `beforeExit` if the loop became alive either after emitting
+    //        // event, or after running some callbacks.
+    //        more = uv_loop_alive(loop);
+    //        if (uv_run(loop, UV_RUN_NOWAIT) != 0)
+    //            more = true;
+    //    }
+    //} while (more == true);
+    //
+    //uv_run(loop, UV_RUN_NOWAIT);
     //uv_stop(loop);
-	/*v8::Isolate::Scope scope(iso);
+	v8::Isolate::Scope scope(iso);
 	if (returnVal){
 		returnVal->Delete();
 		returnVal = nullptr;
@@ -2031,9 +2047,11 @@ IValue * IFunction::CallFunction()
 		return returnVal;
 	}
 	else
-		return nullptr;*/
-    returnVal = data->returnVal;
-    uv_loop_close(loop);
+		return nullptr;
+    //returnVal = data->returnVal;
+    //uv_loop_close(loop);
+
+    //TODO: call settimeout;
     return returnVal;
 }
 
