@@ -1138,7 +1138,7 @@ begin
         tkLString: args.SetReturnValue(PAnsiChar(UTF8String(Result.AsString)));
         tkWString: args.SetReturnValue(PAnsiChar(UTF8String(Result.AsString)));
         tkVariant: ;
-        tkArray: ;
+        tkArray: args.SetReturnValue(TValueToArray(Result, Eng.FEngine));
         tkRecord:
         begin
           Eng.SetRecordIntoContext(Result, Method.ReturnType, args.GetReturnValueAsRecord);
@@ -1146,7 +1146,7 @@ begin
         end;
         tkInterface: SetResultAsIface(Result);
         tkInt64: args.SetReturnValue(Result.AsInteger);
-        tkDynArray: ;
+        tkDynArray: args.SetReturnValue(TValueToArray(Result, Eng.FEngine));
         tkUString: args.SetReturnValue(PAnsiChar(UTF8String(Result.AsString)));
         tkClassRef: ;
         tkPointer: ;//args.SetReturnValue(Result.AsObject, Result.AsObject.ClassType);

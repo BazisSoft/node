@@ -66,6 +66,7 @@ type
   function TValueToDispatch(val: TValue): IDispatch;
   function TValueArrayToJSArray(initArray: array of TValue;
     resArray: IValuesArray; Eng: IEngine): boolean;
+  function TValueToArray(val: TValue; Eng: IEngine): IValuesArray;
 
   function PUtf8CharToString(s: PAnsiChar): string;
 
@@ -438,6 +439,26 @@ end;
   end;
 
   function TValueToJSValue(val: TValue; Eng: IEngine): IValue; overload;
+
+    function MakeObject(value: TValue): IValue;
+    var
+      obj: TObject;
+      objClasstype: TClass;
+    begin
+      Result := nil;
+      obj := value.AsObject;
+      if Assigned(obj) then
+      begin
+        objClasstype := obj.ClassType;
+        if Assigned(Eng) then
+        begin
+          while (not Eng.ClassIsRegistered(objClasstype)) and (objClasstype <> TObject) do
+            objClasstype := objClasstype.ClassParent;
+        end;
+        Result := Eng.NewValue(obj, objClasstype);
+      end;
+    end;
+
   var
     valType: Typinfo.TTypeKind;
   begin
@@ -446,16 +467,16 @@ end;
     case valType of
       tkUnknown: ;
       tkInteger: Result := Eng.NewValue(val.AsInteger);
-      tkChar: ;
-      tkEnumeration: ;
+      tkChar: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
+      tkEnumeration: Result := Eng.NewValue(val.AsOrdinal);
       tkFloat: Result := Eng.NewValue(val.AsExtended);
       tkString: Result := Eng.NewValue(PAnsiChar(Utf8String(val.AsString)));
       tkSet: ;
-      tkClass: ;
+      tkClass: Result := MakeObject(val);
       tkMethod: ;
-      tkWChar: ;
-      tkLString: ;
-      tkWString: ;
+      tkWChar: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
+      tkLString: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
+      tkWString: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
       tkVariant: ;
       tkArray: ;
       tkRecord: ;
@@ -499,6 +520,27 @@ end;
       resArray.SetValue(resValue, i);
     end;
     Result := True;
+  end;
+
+
+  function TValueToArray(val: TValue; Eng: IEngine): IValuesArray;
+  var
+    count, i: integer;
+  begin
+    if val.IsArray then
+    begin
+      count := val.GetArrayLength;
+      Result := Eng.NewArray(count);
+      for i := 0 to count - 1 do
+      begin
+        Result.SetValue(TValueToJSValue(val.GetArrayElement(i), Eng), i);
+      end;
+    end
+//    else
+//    begin
+//      Result := Eng.NewArray(1);
+//      Result.SetValue(TValueToJSValue(val, Eng), 0);
+//    end;
   end;
 
   function PUtf8CharToString(s: PAnsiChar): string;

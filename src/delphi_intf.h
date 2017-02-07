@@ -152,6 +152,8 @@ public:
 	virtual void APIENTRY SetReturnValueString(char * val);
 	virtual void APIENTRY SetReturnValueDouble(double val);
 	virtual void APIENTRY SetReturnValueAsRecord();
+    virtual void APIENTRY SetReturnIValue(IValue * val);
+    virtual void APIENTRY SetReturnIValuesArray(IValueArray * val);
 	virtual IRecord * APIENTRY GetReturnValueAsRecord();
 
 	virtual IValue * APIENTRY GetArg(int index);

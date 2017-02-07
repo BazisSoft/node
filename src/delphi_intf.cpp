@@ -1126,6 +1126,19 @@ void IMethodArgs::SetReturnValueAsRecord()
 	args->GetReturnValue().Set<v8::Object>(recVal->obj.Get(iso));
 }
 
+void IMethodArgs::SetReturnIValue(IValue * val)
+{
+    if (val)
+        args->GetReturnValue().Set<v8::Value>(val->GetV8Value());
+}
+
+void IMethodArgs::SetReturnIValuesArray(IValueArray * val)
+{
+    if (val) {
+        args->GetReturnValue().Set<v8::Array>(val->GetV8Array());
+    }
+}
+
 IRecord * IMethodArgs::GetReturnValueAsRecord()
 {
 	if (!recVal) {
@@ -1269,7 +1282,7 @@ std::vector<v8::Local<v8::Value>> IValueArray::GeV8ValueVector()
 
 v8::Local<v8::Array> IValueArray::GetV8Array()
 {
-	return v8::Local<v8::Array>();
+	return arr.Get(iso);
 }
 
 IGetterArgs::IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, char * prop)

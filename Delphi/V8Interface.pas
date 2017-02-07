@@ -87,6 +87,8 @@ type
     procedure SetReturnValue(val: PAnsiChar); overload; virtual; stdcall; abstract;
     procedure SetReturnValue(val: Double); overload; virtual; stdcall; abstract;
     procedure SetReturnValueAsRecord; virtual; stdcall; abstract;
+    procedure SetReturnValue(val: IValue); overload; virtual; stdcall; abstract;
+    procedure SetReturnValue(val: IValuesArray); overload; virtual; stdcall; abstract;
     function GetReturnValueAsRecord: IRecord; virtual; stdcall; abstract;
 
     function GetArg(index: integer): IValue; virtual; stdcall; abstract;
