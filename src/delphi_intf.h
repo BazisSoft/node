@@ -20,6 +20,9 @@
 
 namespace Bv8 {
 
+class IObject;
+class IValueArray;
+class IRecord;
 class IValue;
 
 class IBazisIntf {
@@ -29,15 +32,34 @@ public:
 	virtual int APIENTRY TestFun() { return 101; };
 };
 
-class IObject : public IBazisIntf {
+class IBaseValue : public IBazisIntf {
+public:
+    IBaseValue(v8::Isolate * isolate, v8::Local<v8::Value> value = v8::Local<v8::Value>());
+    v8::Local<v8::Value> GetV8Value();
+    void SetV8Value(v8::Local<v8::Value> value);
+    v8::Isolate * Isolate();
+    v8::Local<v8::Context> GetCurrentContext();
+    virtual bool APIENTRY IsObject();
+    virtual bool APIENTRY IsArray();
+    virtual bool APIENTRY IsRecord();
+    virtual bool APIENTRY IsValue();
+
+    virtual IObject * APIENTRY AsObject();
+    virtual IValueArray * APIENTRY AsArray();
+    virtual IRecord * APIENTRY AsRecord();
+    virtual IValue * APIENTRY AsValue();
+private:
+    v8::Persistent<v8::Value> v8Value;
+    v8::Isolate * iso;
+};
+
+class IObject : public IBaseValue {
 public:
 	IObject(v8::Isolate * isolate, v8::Local<v8::Object> object);
 	virtual bool APIENTRY IsDelphiObject();
 	virtual void* APIENTRY GetDelphiObject();
 	virtual void* APIENTRY GetDelphiClasstype();
 private:
-	v8::Isolate * iso = nullptr;
-	v8::Persistent<v8::Object> obj;
 	bool isDObject = false;
 };
 
@@ -58,80 +80,76 @@ private:
 	IValue * returnVal = nullptr;
 };
 
-class IValueArray : public IBazisIntf {
+class IValueArray : public IBaseValue {
 public:
 	IValueArray(v8::Isolate * isolate, v8::Local<v8::Array> values_arr);
 	IValueArray(v8::Isolate * isolate, int count);
 	virtual int APIENTRY GetCount();
-	virtual IValue * APIENTRY GetValue(int index);
-	virtual void APIENTRY SetValue(IValue * value, int index);
+	virtual IBaseValue * APIENTRY GetValue(int index);
+	virtual void APIENTRY SetValue(IBaseValue * value, int index);
 
 	std::vector<v8::Local<v8::Value>> GeV8ValueVector();
 	v8::Local<v8::Array> GetV8Array();
 private:
-	std::vector<std::unique_ptr<IValue>> values;
-	v8::Persistent<v8::Array> arr;
+	std::vector<std::unique_ptr<IBaseValue>> values;
 	int length = -1;
-	v8::Isolate * iso = nullptr;
 };
 
-class IRecord : public IBazisIntf {
+class IRecord : public IBaseValue {
 public:
 	IRecord(v8::Isolate * isolate);
 	IRecord(v8::Isolate * isolate, v8::Local<v8::Object> localObj);
-	v8::Persistent<v8::Object> obj;
 
 	virtual void APIENTRY SetIntField(char * name, int val);
 	virtual void APIENTRY SetDoubleField(char * name, double val);
 	virtual void APIENTRY SetBoolField(char * name, bool val);
 	virtual void APIENTRY SetStringField(char * name, char * val);
 	virtual void APIENTRY SetObjectField(char * name, void * val);
+    virtual void APIENTRY SetValueField(char * name, IBaseValue * val);
 
 	virtual int APIENTRY GetIntField(char * name);
 	virtual double APIENTRY GetDoubleField(char * name);
 	virtual bool APIENTRY GetBoolField(char * name);
 	virtual char * APIENTRY GetStringField(char * name);
 	virtual void * APIENTRY GetObjectField(char * name);
+
+    v8::Local<v8::Object> GetV8Object();
 private:
-	v8::Isolate * iso = nullptr;
 	std::vector<char> run_string_result;
 };
 
-class IValue : public IBazisIntf {
+class IValue : public IBaseValue {
 public:
-	IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index);
+    IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index);
 
-	//show arg's classtype 
-	virtual bool APIENTRY ArgIsNumber();
-	virtual bool APIENTRY ArgIsInt();
-	virtual bool APIENTRY ArgIsBool();
-	virtual bool APIENTRY ArgIsString();
-	virtual bool APIENTRY ArgIsObject();
-	virtual bool APIENTRY ArgIsArray();
-	virtual bool APIENTRY ArgIsV8Function();
-	virtual bool APIENTRY ArgIsUndefined();
+    //show arg's classtype 
+    virtual bool APIENTRY ArgIsNumber();
+    virtual bool APIENTRY ArgIsInt();
+    virtual bool APIENTRY ArgIsBool();
+    virtual bool APIENTRY ArgIsString();
+    virtual bool APIENTRY ArgIsObject();
+    virtual bool APIENTRY ArgIsArray();
+    virtual bool APIENTRY ArgIsV8Function();
+    virtual bool APIENTRY ArgIsUndefined();
 
-	//get arg 
-	virtual double APIENTRY GetArgAsNumber();
-	virtual int APIENTRY GetArgAsInt();
-	virtual bool APIENTRY GetArgAsBool();
-	virtual char* APIENTRY GetArgAsString();
-	virtual IObject * APIENTRY GetArgAsObject();
-	virtual IValueArray * APIENTRY GetArgAsArray();
-	virtual IRecord * APIENTRY GetArgAsRecord();
-	virtual IFunction * APIENTRY GetArgAsFunction();
+    //get arg 
+    virtual double APIENTRY GetArgAsNumber();
+    virtual int APIENTRY GetArgAsInt();
+    virtual bool APIENTRY GetArgAsBool();
+    virtual char* APIENTRY GetArgAsString();
+    virtual IObject * APIENTRY GetArgAsObject();
+    virtual IValueArray * APIENTRY GetArgAsArray();
+    virtual IRecord * APIENTRY GetArgAsRecord();
+    virtual IFunction * APIENTRY GetArgAsFunction();
 
-	int GetIndex();
-	v8::Local<v8::Value> GetV8Value();
+    int GetIndex();
 private:
-	v8::Persistent<v8::Value> v8Value;
-	v8::Isolate * isolate = nullptr;
-	std::vector<char> run_string_result;
-	IObject * obj = nullptr;
-	IValueArray * arr = nullptr;
-	IRecord * rec = nullptr;
-	IFunction * func = nullptr;
-	int ind = -1;
+    std::vector<char> run_string_result;
+    IObject * obj = nullptr;
+    IValueArray * arr = nullptr;
+    IRecord * rec = nullptr;
+    IFunction * func = nullptr;
+    int ind = -1;
 };
 
 class IMethodArgs : public IBazisIntf {
@@ -151,10 +169,7 @@ public:
 	virtual void APIENTRY SetReturnValueBool(bool val);
 	virtual void APIENTRY SetReturnValueString(char * val);
 	virtual void APIENTRY SetReturnValueDouble(double val);
-	virtual void APIENTRY SetReturnValueAsRecord();
-    virtual void APIENTRY SetReturnIValue(IValue * val);
-    virtual void APIENTRY SetReturnIValuesArray(IValueArray * val);
-	virtual IRecord * APIENTRY GetReturnValueAsRecord();
+    virtual void APIENTRY SetReturnValue(IBaseValue * val);
 
 	virtual IValue * APIENTRY GetArg(int index);
 	virtual void * APIENTRY GetDelphiMethod();
@@ -162,8 +177,7 @@ public:
 	virtual void APIENTRY SetError(char * errorMsg);
 	std::string error = "";
 private:
-	v8::Isolate * iso = nullptr;
-	IRecord * recVal = nullptr;
+    v8::Isolate * iso = nullptr;
 	std::vector<std::unique_ptr<IValue>> values;
 	const v8::FunctionCallbackInfo<v8::Value>* args = nullptr;
 	std::vector<char> run_string_result;
@@ -188,14 +202,12 @@ public:
 	virtual void APIENTRY SetGetterResultString(char * val);
 	virtual void APIENTRY SetGetterResultDouble(double val);
 	virtual void APIENTRY SetGetterResultAsIndexObject(void * parentObj, void* rttiProp);
-	virtual void APIENTRY SetGetterResultAsRecord();
-	virtual IRecord * APIENTRY GetGetterResultAsRecord();
+    virtual void APIENTRY SetGetterResult(IBaseValue * val);
 
 	virtual void APIENTRY SetError(char * errorMsg);
 	std::string error = "";
 private:
-	v8::Isolate * iso = nullptr;
-	IRecord * recVal = nullptr;
+    v8::Isolate * iso = nullptr;
 	bool IsIndexedProp = false;
 	std::string propName = "";
 	int propInd = -1;
@@ -229,14 +241,12 @@ public:
 	virtual void APIENTRY SetGetterResultString(char * val);
 	virtual void APIENTRY SetGetterResultDouble(double val);
 	virtual void APIENTRY SetGetterResultAsIndexObject(void * parentObj, void* rttiProp);
-	virtual void APIENTRY SetGetterResultAsRecord();
-	virtual IRecord * APIENTRY GetGetterResultAsRecord();
+    virtual void APIENTRY SetGetterResult(IBaseValue * val);
 
 	virtual void APIENTRY SetError(char * errorMsg);
 	std::string error = "";
 private:
-	v8::Isolate * iso = nullptr;
-	IRecord * recVal = nullptr;
+    v8::Isolate * iso = nullptr;
 	bool IsIndexedProp = false;
 	std::string propName = "";
 	int propInd = -1;
@@ -349,17 +359,20 @@ public:
 	virtual IObjectTemplate * APIENTRY AddObject(char * classtype, void * dClass);
 	virtual IObjectTemplate * APIENTRY GetObjectByClass(void * dClass);
 	virtual bool APIENTRY ClassIsRegistered(void * dClass);
+
 	virtual IValue * APIENTRY RunString(char * code, char * scriptName, char * scriptPath, char * additionalParams);
 	virtual char * APIENTRY RunFile(char * fName, char * exeName, char * additionalParams);
 	virtual char * APIENTRY RunIncludeFile(char * fName);
 	virtual char * APIENTRY RunIncludeCode(char * code);
 	virtual void APIENTRY AddIncludeCode(char * code);
 	virtual IValue * APIENTRY CallFunc(char * funcName, IValueArray * args);
+
 	virtual void APIENTRY SetDebug(bool debug, char * arg);
 	bool DebugMode();
 	virtual int APIENTRY ErrorCode();
 	void SetErrorCode(int code);
 	void ExecIncludeCode(v8::Local<v8::Context> context);
+
 	virtual void APIENTRY SetMethodCallBack(TMethodCallBack callBack);
 	virtual void APIENTRY SetPropGetterCallBack(TGetterCallBack callBack);
 	virtual void APIENTRY SetPropSetterCallBack(TSetterCallBack callBack);
@@ -378,7 +391,9 @@ public:
 	virtual IValue * APIENTRY NewNumber(double value);
 	virtual IValue * APIENTRY NewString(char * value);
 	virtual IValue * APIENTRY NewBool(bool value);
+    virtual IRecord * APIENTRY NewRecord();
 	virtual IValue * APIENTRY NewObject(void * value, void * classtype);
+    virtual IValue * APIENTRY NewInterfaceObject(void * value);
 
 
 	void * globObject = nullptr;
@@ -479,9 +494,6 @@ extern "C" {
     BZINTF void BZDECL InitializeNode();
 
 	BZINTF void BZDECL FinalizeNode();
-
-	BZINTF int BZDECL GetEngineVersion();
-
 }
 }
 

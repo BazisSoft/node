@@ -4,8 +4,10 @@ interface
 
 type
 
+  IObject = class;
+  IValuesArray = class;
+  IRecord = class;
   IValue = class;
-  IEngine = class;
 
   IEngineIntf = class
     // do not call!
@@ -15,7 +17,19 @@ type
     function TestFun: Integer; virtual; stdcall; abstract;
   end;
 
-  IObject = class (IEngineIntf)
+  IBaseValue = class(IEngineIntf)
+    function IsJSObject: boolean; virtual; stdcall; abstract;
+    function IsJSArray: boolean; virtual; stdcall; abstract;
+    function IsJSRecord: boolean; virtual; stdcall; abstract;
+    function IsJSValue: boolean; virtual; stdcall; abstract;
+
+    function AsJSObject: IObject; virtual; stdcall; abstract;
+    function AsJSArray: IValuesArray; virtual; stdcall; abstract;
+    function AsJSRecord: IRecord; virtual; stdcall; abstract;
+    function AsJSValue: IValue; virtual; stdcall; abstract;
+  end;
+
+  IObject = class (IBaseValue)
     function IsDelphiObject: boolean; virtual; stdcall; abstract;
     function GetDelphiObject: TObject; virtual; stdcall; abstract;
     function GetDelphiClasstype: TClass; virtual; stdcall; abstract;
@@ -30,18 +44,19 @@ type
     function CallFunction: IValue; virtual; stdcall; abstract;
   end;
 
-  IValuesArray = class (IEngineIntf)
+  IValuesArray = class (IBaseValue)
     function GetCount: integer; virtual; stdcall; abstract;
     function GetValue(index: integer): IValue; virtual; stdcall; abstract;
-    procedure SetValue(value: IValue; index: integer); virtual; stdcall; abstract;
+    procedure SetValue(value: IBaseValue; index: integer); virtual; stdcall; abstract;
   end;
 
-  IRecord = class(IEngineIntf)
+  IRecord = class(IBaseValue)
     procedure SetField(Name: PAnsiChar; val: integer); overload; virtual; stdcall; abstract;
     procedure SetField(Name: PAnsiChar; val: double); overload; virtual; stdcall; abstract;
     procedure SetField(Name: PAnsiChar; val: boolean); overload; virtual; stdcall; abstract;
     procedure SetField(Name: PAnsiChar; val: PAnsiChar); overload; virtual; stdcall; abstract;
     procedure SetField(Name: PAnsiChar; val: TObject); overload; virtual; stdcall; abstract;
+    procedure SetField(Name: PAnsiChar; val: IBaseValue); overload; virtual; stdcall; abstract;
 
     function GetIntField(NAme: PAnsiChar): integer; virtual; stdcall; abstract;
     function GetDoubleField(NAme: PAnsiChar): double; virtual; stdcall; abstract;
@@ -50,7 +65,7 @@ type
     function GetObjectField(NAme: PAnsiChar): TObject; virtual; stdcall; abstract;
   end;
 
-  IValue = class (IEngineIntf)
+  IValue = class (IBaseValue)
     function IsNumber: boolean; virtual; stdcall; abstract;
     function IsInt: boolean; virtual; stdcall; abstract;
     function IsBool: boolean; virtual; stdcall; abstract;
@@ -86,10 +101,7 @@ type
     procedure SetReturnValue(val: boolean); overload; virtual; stdcall; abstract;
     procedure SetReturnValue(val: PAnsiChar); overload; virtual; stdcall; abstract;
     procedure SetReturnValue(val: Double); overload; virtual; stdcall; abstract;
-    procedure SetReturnValueAsRecord; virtual; stdcall; abstract;
-    procedure SetReturnValue(val: IValue); overload; virtual; stdcall; abstract;
-    procedure SetReturnValue(val: IValuesArray); overload; virtual; stdcall; abstract;
-    function GetReturnValueAsRecord: IRecord; virtual; stdcall; abstract;
+    procedure SetReturnValue(val: IBaseValue); overload; virtual; stdcall; abstract;
 
     function GetArg(index: integer): IValue; virtual; stdcall; abstract;
     function GetDelphiMethod: TObject; virtual; stdcall; abstract;
@@ -113,8 +125,7 @@ type
     procedure SetGetterResult(val: PAnsiChar); overload; virtual; stdcall; abstract;
     procedure SetGetterResult(val: Double); overload; virtual; stdcall; abstract;
     procedure SetGetterResultAsIndexObject(ParentObj: TObject; RttiProp: TObject); virtual; stdcall; abstract;
-    procedure SetGetterResultAsRecord; virtual; stdcall; abstract;
-    function GetGetterResultAsRecord: IRecord; virtual; stdcall; abstract;
+    procedure SetGetterResult(val: IBaseValue); overload; virtual; stdcall; abstract;
 
     procedure SetError(errorType: PAnsiChar); virtual; stdcall; abstract;
   end;
@@ -142,8 +153,7 @@ type
     procedure SetResult(val: PAnsiChar); overload; virtual; stdcall; abstract;
     procedure SetResult(val: Double); overload; virtual; stdcall; abstract;
     procedure SetResultAsIndexObject(ParentObj: TObject; RttiProp: TObject); virtual; stdcall; abstract;
-    procedure SetResultAsRecord; virtual; stdcall; abstract;
-    function GetResultAsRecord: IRecord; virtual; stdcall; abstract;
+    procedure SetResult(val: IBaseValue); overload; virtual; stdcall; abstract;
 
     procedure SetError(errorType: PAnsiChar); virtual; stdcall; abstract;
   end;
@@ -190,14 +200,17 @@ type
     function AddObject(classtype: PAnsiChar; dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function GetObject(dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function ClassIsRegistered(dClass: Pointer): boolean; virtual; stdcall; abstract;
+
     function RunString(code, ScriptName, ScriptPath, AdditionalParams: PAnsiChar): IValue; virtual; stdcall; abstract;
     function RunFile(fileName, ExeName, AdditionalParams: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunIncludeFile(fileName: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     function RunIncludeCode(code: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     procedure AddIncludeCode(code: PAnsiChar); virtual; stdcall; abstract;
     function CallFunc(FuncName: PAnsiChar; args: IValuesArray): IValue; virtual; stdcall; abstract;
+
     procedure SetDebug(debug: boolean; arg: PAnsiChar); virtual; stdcall; abstract;
     function ErrorCode: integer; virtual; stdcall; abstract;
+
     procedure SetMethodCallBack(callBack: TMethodCallBack); virtual; stdcall; abstract;
     procedure SetPropGetterCallBack(callBack: TGetterCallBack); virtual; stdcall; abstract;
     procedure SetPropSetterCallBack(callBack: TSetterCallBack); virtual; stdcall; abstract;
@@ -216,7 +229,9 @@ type
     function NewValue(val: double): IValue; overload; virtual; stdcall; abstract;
     function NewValue(val: PAnsiChar): IValue; overload; virtual; stdcall; abstract;
     function NewValue(val: boolean): IValue; overload; virtual; stdcall; abstract;
-    function NewValue(obj: Pointer; dClasstype: Pointer): IValue; overload; virtual; stdcall; abstract;
+    function NewRecord: IRecord; virtual; stdcall; abstract;
+    function NewObject(obj: Pointer; dClasstype: Pointer): IValue; virtual; stdcall; abstract;
+    function NewInterfaceObject(p: Pointer): IValue; virtual; stdcall; abstract;
 
   end;
 
