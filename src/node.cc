@@ -7,6 +7,7 @@
 #include "node_version.h"
 #include "node_internals.h"
 #include "node_revert.h"
+#include "delphi_intf.h"
 
 #if defined HAVE_PERFCTR
 #include "node_counters.h"
@@ -138,6 +139,7 @@ static bool throw_deprecation = false;
 static bool trace_sync_io = false;
 static bool track_heap_objects = false;
 static const char* eval_string = nullptr;
+static const char * filename_string = nullptr;
 static unsigned int preload_module_count = 0;
 static const char** preload_modules = nullptr;
 #if HAVE_INSPECTOR
@@ -235,6 +237,20 @@ static void PrintErrorString(const char* format, ...) {
   va_start(ap, format);
 #ifdef _WIN32
   HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
+
+  //send err msg to delphi log;
+  {
+	  auto iso = Isolate::GetCurrent();
+	  if (iso) {
+		  auto eng = Bv8::IEngine::GetEngine(iso);
+		  if (eng) {
+			  int n = _vscprintf(format, ap);
+			  std::vector<char> out(n + 1);
+			  vsprintf(out.data(), format, ap);
+			  eng->LogErrorMessage(out.data());
+		  }
+	  }
+  }
 
   // Check if stderr is something other than a tty/console
   if (stderr_handle == INVALID_HANDLE_VALUE ||
@@ -1743,11 +1759,11 @@ void GetActiveHandles(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(ary);
 }
 
-
 NO_RETURN void Abort() {
   DumpBacktrace(stderr);
   fflush(stderr);
-  ABORT_NO_BACKTRACE();
+  throw(V8Exception());
+  /// NODE: ABORT_NO_BACKTRACE();
 }
 
 
@@ -3145,6 +3161,13 @@ void SetupProcessObject(Environment* env,
                       String::NewFromUtf8(env->isolate(), eval_string));
   }
 
+  ////
+  if (filename_string) {
+    READONLY_PROPERTY(process,
+                      "_filename",
+                      String::NewFromUtf8(env->isolate(), filename_string));
+  }
+
   // -p, --print
   if (print_eval) {
     READONLY_PROPERTY(process, "_print_eval", True(env->isolate()));
@@ -3705,6 +3728,11 @@ static void ParseArgs(int* argc,
     } else if (strcmp(arg, "--expose-internals") == 0 ||
                strcmp(arg, "--expose_internals") == 0) {
       // consumed in js
+    ////make node-delphi 'filename' arg
+    } else if (strcmp(arg, "-f") == 0){
+        args_consumed += 1;
+        filename_string = argv[index + 1];
+    //*/
     } else {
       // V8 option.  Pass through as-is.
       new_v8_argv[new_v8_argc] = arg;
@@ -4342,106 +4370,242 @@ void FreeEnvironment(Environment* env) {
 
 // Entry point for new node instances, also called directly for the main
 // node instance.
-static void StartNodeInstance(void* arg) {
-  NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
-  Isolate::CreateParams params;
-  ArrayBufferAllocator array_buffer_allocator;
-  params.array_buffer_allocator = &array_buffer_allocator;
-#ifdef NODE_ENABLE_VTUNE_PROFILING
-  params.code_event_handler = vTune::GetVtuneCodeEventHandler();
-#endif
-  Isolate* isolate = Isolate::New(params);
 
+////variables for keep script alive after running
+class ScriptParams {
+public:
+	ScriptParams(Isolate * iso) : locker(iso), /*isolate_scope(iso),*/ h_scope(iso) {};
+	~ScriptParams() {
+		auto k = 0;
+		for (int i = 0; i < 4; i++) {
+			k++;
+		}
+		assert(k == 4);
+	};
+	void SetInstanceData(NodeInstanceData * data) {
+		instance_data = data;
+	};
+	Local<Context> CreateContext(Isolate * iso, Local<ObjectTemplate> global) {
+		ctx = Context::New(iso, NULL, global);
+		return ctx;
+	}
+	NodeInstanceData * GetInstanceData() { return instance_data; };
+
+private:
+	Locker locker;
+	//Isolate::Scope isolate_scope;
+	HandleScope h_scope;
+	NodeInstanceData * instance_data;
+	Local<Context> ctx;
+};
+
+class EnvWrapeer {
+public:
+	EnvWrapeer(IsolateData * iso_data, Local<Context> ctx) : env(iso_data, ctx) {};
+	Environment * GetEnvironment() { return &env; };
+private:
+	Environment env;
+};
+
+class IsolateDataWrapper {
+public:
+	IsolateDataWrapper(v8::Isolate* iso, uv_loop_t* event_loop,
+		uint32_t* zero_fill_field = nullptr) : isolate_data(iso, event_loop, zero_fill_field) {};
+	IsolateData * GetData() { return &isolate_data; };
+private:
+	IsolateData isolate_data;
+};
+
+//
+//Isolate * isolate = nullptr;
+ArrayBufferAllocator array_buffer_allocator;
+//ScriptParams * script_params;
+//EnvWrapeer * env_wrapper;
+//IsolateDataWrapper * iso_data_wrapper;
+////
+
+NodeEngine::NodeEngine()
+{
+	node_started = false;
+	//node_engine_isolate = nullptr;
+	Isolate::CreateParams params;
+	params.array_buffer_allocator = &array_buffer_allocator;
+	node_engine_isolate = Isolate::New(params);
+	script_params_ptr = new ScriptParams(node_engine_isolate);
+}
+
+NodeEngine::~NodeEngine()
+{
+	//isolate->TerminateExecution();
+	//it should be there, but now it throws an exception
+	delete static_cast<ScriptParams *>(script_params_ptr);
+	node_engine_isolate->Dispose();
+	//node_engine_isolate = nullptr;
+}
+
+//static v8::Isolate * node_engine_isolate;
+
+void NodeEngine::StartNodeInstance(void* arg, void* eng) {
+  using namespace Bv8;
+  if (!node_engine_isolate) {
+	  throw V8Exception();
+  }
+  NodeInstanceData* instance_data = static_cast<NodeInstanceData*>(arg);
   {
     Mutex::ScopedLock scoped_lock(node_isolate_mutex);
     if (instance_data->is_main()) {
       CHECK_EQ(node_isolate, nullptr);
-      node_isolate = isolate;
+      node_isolate = node_engine_isolate;
     }
   }
+
+  Isolate::Scope iso_scope(node_engine_isolate);
 
   if (track_heap_objects) {
-    isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
+	  node_engine_isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
   }
 
-  {
-    Locker locker(isolate);
-    Isolate::Scope isolate_scope(isolate);
-    HandleScope handle_scope(isolate);
-    IsolateData isolate_data(isolate, instance_data->event_loop(),
-                             array_buffer_allocator.zero_fill_field());
-    Local<Context> context = Context::New(isolate);
-    Context::Scope context_scope(context);
-    Environment env(&isolate_data, context);
-    env.Start(instance_data->argc(),
-              instance_data->argv(),
-              instance_data->exec_argc(),
-              instance_data->exec_argv(),
-              v8_is_profiling);
+  {	  
+	  auto iso_data_wrapper = new IsolateDataWrapper(node_engine_isolate, instance_data->event_loop(),
+		  array_buffer_allocator.zero_fill_field());
+	  iso_data_wrapper_ptr = iso_data_wrapper;
+	  auto global = Local<ObjectTemplate>();
+	  if (eng) {
+		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  global = engine->MakeGlobalTemplate(node_engine_isolate);
+		  node_engine_isolate->SetData(EngineSlot, engine);
+	  }
+	  auto script_params = static_cast<ScriptParams *>(script_params_ptr);
+	  auto context = script_params->CreateContext(node_engine_isolate, global);
 
-    isolate->SetAbortOnUncaughtExceptionCallback(
-        ShouldAbortOnUncaughtException);
+	  if (eng) {
+		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked();
+		  if (engine->globalTemplate) {
+			  globalObject->SetInternalField(0, v8::External::New(node_engine_isolate, engine->globObject));
+			  globalObject->SetInternalField(1, v8::External::New(node_engine_isolate, engine->globalTemplate->DClass));
+		  }
+	  }
+	  ////make enter manually without Context::Scope, and context will exit when delphi engine will be destroyed;	
+	  context->Enter();
+	  auto env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
+	  env_wrapper_ptr = env_wrapper;
+	  Environment *env = env_wrapper->GetEnvironment();
+	  env->Start(instance_data->argc(),
+		  instance_data->argv(),
+		  instance_data->exec_argc(),
+		  instance_data->exec_argv(),
+		  v8_is_profiling);
 
-    // Start debug agent when argv has --debug
-    if (instance_data->use_debug_agent())
-      StartDebug(&env, debug_wait_connect);
+	  node_started = true;
 
-    {
-      Environment::AsyncCallbackScope callback_scope(&env);
-      LoadEnvironment(&env);
-    }
+	  node_engine_isolate->SetAbortOnUncaughtExceptionCallback(
+		  ShouldAbortOnUncaughtException);
 
-    env.set_trace_sync_io(trace_sync_io);
+	  // Start debug agent when argv has --debug
+	  if (instance_data->use_debug_agent())
+		  StartDebug(env, debug_wait_connect);
 
-    // Enable debugger
-    if (instance_data->use_debug_agent())
-      EnableDebug(&env);
+	  {
+		  Environment::AsyncCallbackScope callback_scope(env);
+		  LoadEnvironment(env);
+	  }
+	  env->set_trace_sync_io(trace_sync_io);
 
-    {
-      SealHandleScope seal(isolate);
-      bool more;
-      do {
-        v8_platform.PumpMessageLoop(isolate);
-        more = uv_run(env.event_loop(), UV_RUN_ONCE);
+	  // Enable debugger
+	  if (instance_data->use_debug_agent())
+		  EnableDebug(env);
 
-        if (more == false) {
-          v8_platform.PumpMessageLoop(isolate);
-          EmitBeforeExit(&env);
+	  if (eng) {
+		  //execution of 'pre-code'
+		  IEngine	* engine = static_cast<IEngine *>(eng);
+		  engine->ExecIncludeCode(context);
+	  }
 
-          // Emit `beforeExit` if the loop became alive either after emitting
-          // event, or after running some callbacks.
-          more = uv_loop_alive(env.event_loop());
-          if (uv_run(env.event_loop(), UV_RUN_NOWAIT) != 0)
-            more = true;
-        }
-      } while (more == true);
-    }
+	  {
+		  SealHandleScope seal(node_engine_isolate);
+		  bool more;
+		  do {
+			  v8_platform.PumpMessageLoop(node_engine_isolate);
+			  more = uv_run(env->event_loop(), UV_RUN_ONCE);
 
-    env.set_trace_sync_io(false);
+			  if (more == false) {
+				  v8_platform.PumpMessageLoop(node_engine_isolate);
+				  EmitBeforeExit(env);
 
-    int exit_code = EmitExit(&env);
-    if (instance_data->is_main())
-      instance_data->set_exit_code(exit_code);
-    RunAtExit(&env);
-
-    WaitForInspectorDisconnect(&env);
-#if defined(LEAK_SANITIZER)
-    __lsan_do_leak_check();
-#endif
+				  // Emit `beforeExit` if the loop became alive either after emitting
+				  // event, or after running some callbacks.
+				  more = uv_loop_alive(env->event_loop());
+				  if (uv_run(env->event_loop(), UV_RUN_NOWAIT) != 0)
+					  more = true;
+			  }
+		  } while (more == true);
+	  }
   }
-
-  {
-    Mutex::ScopedLock scoped_lock(node_isolate_mutex);
-    if (node_isolate == isolate)
-      node_isolate = nullptr;
-  }
-
-  CHECK_NE(isolate, nullptr);
-  isolate->Dispose();
-  isolate = nullptr;
 }
 
-int Start(int argc, char** argv) {
+void NodeEngine::StopNodeInstance() {
+	//return;
+	if (!node_started)
+		return;
+	//auto isolate = isolate;
+	auto ctx = node_engine_isolate->GetCurrentContext();
+	if (*ctx)
+		ctx->Exit();
+	node_engine_isolate->TerminateExecution();
+	auto instance_data = static_cast<ScriptParams *>(script_params_ptr)->GetInstanceData();
+	Environment * env = static_cast<EnvWrapeer *>(env_wrapper_ptr)->GetEnvironment();
+    {
+        Isolate::Scope scope(node_engine_isolate);
+        ////original code from node (was at StartNodeInstance)
+        env->set_trace_sync_io(false);
+
+        int exit_code = EmitExit(env);
+        RunAtExit(env);
+
+        WaitForInspectorDisconnect(env);
+#if defined(LEAK_SANITIZER)
+        __lsan_do_leak_check();
+#endif
+        ///it is here for allowing to run more scripts at one process - Letos;
+        debugger_running = false;
+    }
+	{
+		Mutex::ScopedLock scoped_lock(node_isolate_mutex);
+		if (node_isolate == node_engine_isolate)
+			node_isolate = nullptr;
+	}
+	CHECK_NE(node_engine_isolate, nullptr);
+	delete static_cast<EnvWrapeer *>(env_wrapper_ptr);
+	delete static_cast<IsolateDataWrapper *>(iso_data_wrapper_ptr);
+
+	node_started = false;
+
+    //set static vars to default
+    print_eval = false;
+    force_repl = false;
+    syntax_check_only = false;
+    trace_deprecation = false;
+    throw_deprecation = false;
+    trace_sync_io = false;
+    track_heap_objects = false;
+    eval_string = nullptr;
+    filename_string = nullptr;
+    preload_module_count = 0;
+    preload_modules = nullptr;
+    use_debug_agent = false;
+    debug_wait_connect = false;
+    debug_port = 5858;
+    inspector_port = 9229;
+    v8_thread_pool_size = v8_default_thread_pool_size;
+    prof_process = false;
+    v8_is_profiling = false;
+    node_is_initialized = false;
+
+}
+
+int NodeEngine::Start(int argc, char** argv, std::function<void(int)> func, void* eng) {
+	exit = func;
   PlatformInit();
 
   CHECK_GT(argc, 0);
@@ -4471,19 +4635,16 @@ int Start(int argc, char** argv) {
 
   int exit_code = 1;
   {
-    NodeInstanceData instance_data(NodeInstanceType::MAIN,
+    NodeInstanceData instance_data(NodeInstanceType::WORKER,
                                    uv_default_loop(),
                                    argc,
                                    const_cast<const char**>(argv),
                                    exec_argc,
                                    exec_argv,
                                    use_debug_agent);
-    StartNodeInstance(&instance_data);
+    StartNodeInstance(&instance_data, eng);
     exit_code = instance_data.exit_code();
   }
-  V8::Dispose();
-
-  v8_platform.Dispose();
 
   delete[] exec_argv;
   exec_argv = nullptr;
@@ -4491,5 +4652,84 @@ int Start(int argc, char** argv) {
   return exit_code;
 }
 
+/// node rerun methods
+int exec_argc_ = 0;
+const char** exec_argv_ = nullptr;
+
+void InitIalize(int argc, char *argv[]) {
+	PlatformInit();
+
+	CHECK_GT(argc, 0);
+
+	// Hack around with the argv pointer. Used for process.title = "blah".
+	argv = uv_setup_args(argc, argv);
+
+	// This needs to run *before* V8::Initialize().  The const_cast is not
+	// optional, in case you're wondering.
+	Init(&argc, const_cast<const char**>(argv), &exec_argc_, &exec_argv_);
+
+#if HAVE_OPENSSL
+#ifdef NODE_FIPS_MODE
+	// In the case of FIPS builds we should make sure
+	// the random source is properly initialized first.
+	OPENSSL_init();
+#endif  // NODE_FIPS_MODE
+	// V8 on Windows doesn't have a good source of entropy. Seed it from
+	// OpenSSL's pool.
+	V8::SetEntropySource(crypto::EntropySource);
+#endif
+
+	v8_platform.Initialize(v8_thread_pool_size);
+	V8::Initialize();
+}
+
+static bool scripts_running;
+
+NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<void(int)> func, void * eng)
+{
+	StopNodeInstance();
+	exit = func;
+	int exit_code = 0;
+
+	int v8_argc;
+	const char** v8_argv;
+	NodeInstanceType instance_type;
+	Bv8::IEngine* engine = nullptr;
+	if (eng)
+		engine = static_cast<Bv8::IEngine*>(eng);
+	if (engine && engine->DebugMode())
+		instance_type = NodeInstanceType::MAIN;
+	else
+		instance_type = NodeInstanceType::WORKER;
+	ParseArgs(&argc, const_cast<const char**>(argv), &exec_argc_, &exec_argv_, &v8_argc, &v8_argv);
+	{
+		NodeInstanceData instance_data(instance_type,
+			uv_default_loop(),
+			argc,
+			const_cast<const char**>(argv),
+			exec_argc_,
+			exec_argv_,
+			use_debug_agent);
+		StartNodeInstance(&instance_data, eng);
+		/*if (instance_type == NodeInstanceType::MAIN)
+			exit_code = instance_data.exit_code();*/
+	}
+	return exit_code;
+}
+
+NODE_EXTERN void NodeEngine::StopScript()
+{
+	StopNodeInstance();
+}
+
+NODE_EXTERN void Dispose()
+{
+	V8::Dispose();
+
+	v8_platform.Dispose();
+
+	delete[] exec_argv_;
+	exec_argv_ = nullptr;
+}
 
 }  // namespace node

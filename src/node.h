@@ -41,6 +41,7 @@
 
 #include "v8.h"  // NOLINT(build/include_order)
 #include "node_version.h"  // NODE_MODULE_VERSION
+#include <functional>
 
 #define NODE_MAKE_VERSION(major, minor, patch)                                \
   ((major) * 0x1000 + (minor) * 0x100 + (patch))
@@ -152,9 +153,7 @@ NODE_EXTERN v8::Local<v8::Value> MakeCallback(
 
 }  // namespace node
 
-#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 #include "node_internals.h"
-#endif
 
 #include <assert.h>
 #include <stdint.h>
@@ -178,23 +177,54 @@ typedef intptr_t ssize_t;
 
 namespace node {
 
+
+class V8Exception : public std::exception {
+};
+
+static std::function<void(int)> exit;
+
 NODE_EXTERN extern bool no_deprecation;
 #if HAVE_OPENSSL && NODE_FIPS_MODE
 NODE_EXTERN extern bool enable_fips_crypto;
 NODE_EXTERN extern bool force_fips_crypto;
 #endif
 
-NODE_EXTERN int Start(int argc, char *argv[]);
+NODE_EXTERN int Start(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
+/// splitted 'Start' method for using in Delphi;
+NODE_EXTERN void InitIalize(int argc, char *argv[]);
+NODE_EXTERN void Dispose();
 NODE_EXTERN void Init(int* argc,
                       const char** argv,
                       int* exec_argc,
                       const char*** exec_argv);
+////class of node engine allows to run more than one script at one time
+class NodeEngine {
+public:
+	////variables for keep script alive after running all code;
+//	ArrayBufferAllocator array_buffer_allocator;
+	void * script_params_ptr;
+	void * env_wrapper_ptr;
+	void * iso_data_wrapper_ptr;
+	////
+	NodeEngine();
+	~NodeEngine();
+	v8::Isolate * node_engine_isolate;
+
+	NODE_EXTERN void StartNodeInstance(void* arg, void* eng);
+	NODE_EXTERN void StopNodeInstance();
+	NODE_EXTERN int Start(int argc, char **argv, std::function<void(int)> func, void *eng = nullptr);
+	NODE_EXTERN int RunScript(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
+	NODE_EXTERN void StopScript();
+private:
+	bool node_started;
+};
 
 class IsolateData;
 class Environment;
 
 NODE_EXTERN IsolateData* CreateIsolateData(v8::Isolate* isolate,
                                            struct uv_loop_s* loop);
+
 NODE_EXTERN void FreeIsolateData(IsolateData* isolate_data);
 
 NODE_EXTERN Environment* CreateEnvironment(IsolateData* isolate_data,
