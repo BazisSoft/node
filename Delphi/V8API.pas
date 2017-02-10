@@ -7,7 +7,7 @@ unit V8Api;
 interface
 
 uses SysUtils, Windows, V8Interface, Variants, RTTI, TypInfo, ScriptInterface,
-WinApi.ActiveX;
+  Classes, WinApi.ActiveX;
 
 type
 
@@ -44,6 +44,7 @@ type
 //  function JSValToJSString(val: jsval): PJSString;
   function JSValToBoolean(val: jsval): Boolean;
   function JSValToString(val: jsval): UnicodeString;
+  function JsValToVariant(val: jsval): Variant;
   function JsValToTValue(val: jsval): TValue; overload;
   function JsValToTValue(val: jsval; typ: TRttiType): TValue; overload;
   function JSvalToRecordTValue(val: jsval; typ: TRttiType): TValue;
@@ -61,11 +62,14 @@ type
 //  function JSValIsNull(v: jsval): Boolean;
 //  function JSValIsVoid(v: jsval): Boolean;
 
-  function TValueToJSValue(val: TValue; typ: TRttiType; JSVal: IValue): boolean; overload;
-  function TValueToJSValue(val: TValue; Eng: IEngine): IValue; overload;
+  function TValueToJSValue(val: TValue; Eng: IEngine;
+    IntfList: IInterfaceList): IBaseValue;
   function TValueToDispatch(val: TValue): IDispatch;
   function TValueArrayToJSArray(initArray: array of TValue;
-    resArray: IValuesArray; Eng: IEngine): boolean;
+    resArray: IValuesArray; Eng: IEngine; IntfList: IInterfaceList): boolean;
+  function TValueToArray(val: TValue; Eng: IEngine; IntfList: IInterfaceList): IValuesArray;
+  function TValueToJSRecord(recVal: TValue; Eng: IEngine; IntfList: IInterfaceList;
+    RecDescr: TRttiType = nil): IRecord;
 
   function PUtf8CharToString(s: PAnsiChar): string;
 
@@ -233,6 +237,21 @@ end;
     Result := TValue.FromArray(Result.TypeInfo, TValueArr);
   end;
 
+  function JsValToVariant(val: jsval): Variant;
+  begin
+    if not assigned(val) then
+      Exit('');
+    //checking for type
+    if val.IsBool then
+      Result := JSValToBoolean(val)
+    else if val.IsInt then
+      Result := JSValToInt(val)
+    else if Val.IsNumber then
+      Result := JSValToDouble(val)
+    else if val.IsString then
+      Result := JSValToString(val);
+  end;
+
   function JsValToTValue(val: jsval): TValue;
   begin
     if not assigned(val) then
@@ -351,7 +370,7 @@ end;
       tkWChar: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
       tkLString: Result := (UTF8ToUnicodeString(RawByteString(val.AsString)));
       tkWString: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
-      tkVariant: Result := JsValToTValue(val);
+      tkVariant: Result := TValue.From<Variant>(JsValToVariant(val));
       tkArray: ;
       tkRecord:
       begin
@@ -431,37 +450,81 @@ end;
     result := v.IsString;
   end;
 
-  function TValueToJSValue(val: TValue; typ: TRttiType; JSVal: IValue): boolean;
-  begin
-     //todo
-    raise EScriptEngineException.Create('don''t use uncompleted methods');
-  end;
+  function TValueToJSValue(val: TValue; Eng: IEngine; IntfList: IInterfaceList): IBaseValue;
 
-  function TValueToJSValue(val: TValue; Eng: IEngine): IValue; overload;
+    function MakeObject: IValue;
+    var
+      obj: TObject;
+      objClasstype: TClass;
+    begin
+      Result := nil;
+      obj := val.AsObject;
+      if Assigned(obj) then
+      begin
+        objClasstype := obj.ClassType;
+        if Assigned(Eng) then
+        begin
+          while (not Eng.ClassIsRegistered(objClasstype)) and (objClasstype <> TObject) do
+            objClasstype := objClasstype.ClassParent;
+        end;
+        Result := Eng.NewObject(obj, objClasstype);
+      end;
+    end;
+
+    function MakeInterface: IBaseValue;
+    var
+      ResDispatch: IDispatch;
+    begin
+      Result := nil;
+      if Assigned(IntfList) then
+      begin
+        ResDispatch := TValueToDispatch(val);
+        IntfList.Add(ResDispatch);
+        Result := Eng.NewInterfaceObject(Pointer(ResDispatch));
+      end;
+    end;
+
+    function MakeVariant: IBaseValue;
+    var
+      variantVal: Variant;
+    begin
+      Result := nil;
+      variantVal := val.AsVariant;
+      if VarType(variantVal) = varBoolean then
+        Result := Eng.NewValue(Boolean(variantVal))
+      else
+      begin
+        if VarIsNumeric(variantVal) then
+          Result := Eng.NewValue(Double(variantVal))
+        else if VarIsStr(variantVal) then
+          Result := Eng.NewValue(PAnsiChar(UTF8String(string(variantVal))));
+      end;
+    end;
+
   var
     valType: Typinfo.TTypeKind;
   begin
     Result := nil;
     valType := val.Kind;
     case valType of
-      tkUnknown: ;
+      tkUnknown: Result := nil;
       tkInteger: Result := Eng.NewValue(val.AsInteger);
-      tkChar: ;
-      tkEnumeration: ;
+      tkChar: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
+      tkEnumeration: Result := Eng.NewValue(val.AsOrdinal);
       tkFloat: Result := Eng.NewValue(val.AsExtended);
       tkString: Result := Eng.NewValue(PAnsiChar(Utf8String(val.AsString)));
       tkSet: ;
-      tkClass: ;
+      tkClass: Result := MakeObject;
       tkMethod: ;
-      tkWChar: ;
-      tkLString: ;
-      tkWString: ;
-      tkVariant: ;
-      tkArray: ;
-      tkRecord: ;
-      tkInterface: ;
-      tkInt64: ;
-      tkDynArray: ;
+      tkWChar: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
+      tkLString: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
+      tkWString: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
+      tkVariant: Result := MakeVariant;
+      tkArray: Result := TValueToArray(val, Eng, IntfList);
+      tkRecord: Result := TValueToJSRecord(val, Eng, IntfList);
+      tkInterface: Result := MakeInterface;
+      tkInt64: Result := Eng.NewValue(val.AsInteger);
+      tkDynArray: Result := TValueToArray(val, Eng, IntfList);
       tkUString: Result := Eng.NewValue(PAnsiChar(Utf8String(val.AsString)));
       tkClassRef: ;
       tkPointer: ;
@@ -483,22 +546,77 @@ end;
   end;
 
   function TValueArrayToJSArray(initArray: array of TValue;
-    resArray: IValuesArray; Eng: IEngine): boolean;
+    resArray: IValuesArray; Eng: IEngine; IntfList: IInterfaceList): boolean;
   var
     count: integer;
     i: Integer;
     initValue: TValue;
-    resValue: IValue;
+    resValue: IBaseValue;
   begin
     count := Length(initArray);
     if count > resArray.GetCount then
       raise EScriptEngineException.Create('Result array count is less than init array count');
     for i := 0 to count - 1 do
     begin
-      resValue := TValueToJSValue(initValue, Eng);
+      resValue := TValueToJSValue(initValue, Eng, IntfList);
       resArray.SetValue(resValue, i);
     end;
     Result := True;
+  end;
+
+
+  function TValueToArray(val: TValue; Eng: IEngine;
+    IntfList: IInterfaceList): IValuesArray;
+  var
+    count, i: integer;
+  begin
+    Result := nil;
+    if val.IsArray then
+    begin
+      count := val.GetArrayLength;
+      Result := Eng.NewArray(count);
+      for i := 0 to count - 1 do
+      begin
+        Result.SetValue(TValueToJSValue(val.GetArrayElement(i), Eng, IntfList), i);
+      end;
+    end
+//    else
+//    begin
+//      Result := Eng.NewArray(1);
+//      Result.SetValue(TValueToJSValue(val, Eng), 0);
+//    end;
+  end;
+
+  function TValueToJSRecord(recVal: TValue; Eng: IEngine; IntfList: IInterfaceList;
+    RecDescr: TRttiType): IRecord;
+  var
+    FieldArr: TArray<TRttiField>;
+    Field: TRttiField;
+    PropArr: TArray<TRttiProperty>;
+    Prop: TRttiProperty;
+    ValueType: TRttiType;
+  begin
+    if not Assigned(RecDescr) then
+      RecDescr := TRttiContext.Create.GetType(recVal.TypeInfo);
+    Result := Eng.NewRecord;
+    FieldArr := RecDescr.GetFields;
+    for Field in FieldArr do
+    begin
+      ValueType := Field.FieldType;
+      if (Field.Visibility = mvPublic) and (Assigned(ValueType)) and
+        (ValueType.TypeKind in tkProperties) then
+        Result.SetField(PAnsiChar(UTF8String(Field.Name)),
+          TValueToJSValue(Field.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
+
+    PropArr := RecDescr.GetProperties;
+    for Prop in PropArr do
+    begin
+      ValueType := Prop.PropertyType;
+      if (Prop.Visibility = mvPublic) and (Assigned(ValueType)) and (ValueType.TypeKind in tkProperties) then
+        Result.SetField(PAnsiChar(UTF8String(Field.Name)),
+          TValueToJSValue(Prop.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
+      end;
+    end;
   end;
 
   function PUtf8CharToString(s: PAnsiChar): string;
