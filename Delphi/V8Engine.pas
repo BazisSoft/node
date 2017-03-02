@@ -385,7 +385,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -436,7 +439,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -536,7 +542,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -606,7 +615,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -648,7 +660,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -700,7 +715,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -749,7 +767,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -779,7 +800,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -842,7 +866,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -937,7 +964,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -986,7 +1016,7 @@ begin
           obj := args.GetDelphiObject;
       end;
       if Assigned(Prop) and Assigned(obj) then
-        Result := Prop.GetValue(obj, [PUtf8CharToString(args.GetPropName)]);
+        Result := Prop.GetValue(obj, [JsValToTValue(args.GetPropIndexIValue)]);
     except
       on E: EVariantTypeCastError do
       begin
@@ -1007,7 +1037,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -1033,7 +1066,7 @@ begin
       Exit;
     obj := args.GetDelphiObject;
     try
-      Prop.SetValue(obj, [PUtf8CharToString(args.GetPropName)], JsValToTValue(args.GetValue, Prop.PropertyType));
+      Prop.SetValue(obj, [JsValToTValue(args.GetPropIndexIValue)], JsValToTValue(args.GetValue, Prop.PropertyType));
     except
       on E: EArgumentOutOfRangeException do
         Eng.FLog.Add('Argumrent out of range');
@@ -1049,7 +1082,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);
@@ -1136,7 +1172,10 @@ begin
       if Assigned(eng.FLog) then
       begin
         if Eng.FIgnoredExceptions.IndexOf(e.ClassType) < 0 then
-          eng.FLog.Add('Uncaught exception: ' + E.Message)
+        begin
+          eng.FLog.Add('Uncaught exception: ' + E.Message);
+          args.SetError(PAnsiChar(UTF8String('Uncaught exception: ' + E.Message)));
+        end
         {$ifdef DEBUG}
         else
           eng.FLog.Add('--' + E.Message);

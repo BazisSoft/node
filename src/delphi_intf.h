@@ -115,6 +115,7 @@ public:
 
     v8::Local<v8::Object> GetV8Object();
 private:
+    v8::Local<v8::Value> GetField(char * name);
 	std::vector<char> run_string_result;
 };
 
@@ -144,6 +145,8 @@ public:
 
     int GetIndex();
 private:
+
+    IObject * GetObjectFromString();
     std::vector<char> run_string_result;
     IObject * obj = nullptr;
     IValueArray * arr = nullptr;
@@ -186,12 +189,14 @@ private:
 class IGetterArgs : public IBazisIntf {
 public:
 	IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, char * prop);
+    IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, v8::Local<v8::Value> index);
 	IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int index);
 	virtual void * APIENTRY GetEngine();
 	virtual void * APIENTRY GetDelphiObject();
 	virtual void * APIENTRY GetDelphiClasstype();
 	virtual char * APIENTRY GetPropName();
 	virtual int APIENTRY GetPropIndex();
+    virtual IValue * APIENTRY GetPropIndexAsIValue();
 
 	virtual void APIENTRY SetGetterResultUndefined();
 	virtual void APIENTRY SetGetterResultIFace(void * value);
@@ -210,6 +215,7 @@ private:
     v8::Isolate * iso = nullptr;
 	bool IsIndexedProp = false;
 	std::string propName = "";
+    IValue * indexValue = nullptr;
 	int propInd = -1;
 	const v8::PropertyCallbackInfo<v8::Value> * propinfo = nullptr;
 	std::vector<char> run_string_result;
@@ -217,14 +223,15 @@ private:
 
 class ISetterArgs : public IBazisIntf {
 public:
-	ISetterArgs(const v8::PropertyCallbackInfo<void>& info, char * prop, v8::Local<v8::Value> newValue);
-    ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, v8::Local<v8::Value> value, v8::Local<v8::Value> newValue);
+    ISetterArgs(const v8::PropertyCallbackInfo<void>& info, char * prop, v8::Local<v8::Value> newValue);
+    ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, v8::Local<v8::Value> index, v8::Local<v8::Value> newValue);
 	ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int index, v8::Local<v8::Value> newValue);
 	virtual void * APIENTRY GetEngine();
 	virtual void * APIENTRY GetDelphiObject();
 	virtual void * APIENTRY GetDelphiClasstype();
 	virtual char * APIENTRY GetPropName();
 	virtual int APIENTRY GetPropIndex();
+    virtual IValue * APIENTRY GetPropIndexAsIValue();
 	virtual IValue * APIENTRY GetValue();
 
 	virtual void * APIENTRY GetValueAsDObject();
@@ -249,6 +256,7 @@ public:
 private:
     v8::Isolate * iso = nullptr;
 	bool IsIndexedProp = false;
+    IValue * indexVal = nullptr;
 	std::string propName = "";
 	int propInd = -1;
 	std::vector<char> run_string_result;
@@ -395,7 +403,7 @@ public:
 	virtual IValue * APIENTRY NewString(char * value);
 	virtual IValue * APIENTRY NewBool(bool value);
     virtual IRecord * APIENTRY NewRecord();
-	virtual IValue * APIENTRY NewObject(void * value, void * classtype);
+	virtual IObject * APIENTRY NewObject(void * value, void * classtype);
     virtual IValue * APIENTRY NewInterfaceObject(void * value);
 
 
@@ -430,6 +438,7 @@ private:
 
 	std::unique_ptr<IValueArray> run_result_array;
 	std::unique_ptr<IValue> run_result_value;
+    std::unique_ptr<IObject> run_result_object;
 
 	TMethodCallBack methodCall;
 	TGetterCallBack getterCall;
@@ -478,6 +487,8 @@ private:
 		const v8::PropertyCallbackInfo<v8::Value>& info);
 
 	static void FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
+    //callBack for toString() js method;
+    static void toStringCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
 
 	static void Throw_Exception(const char * error_msg);
 	static void MessageListener(v8::Local<v8::Message> message, v8::Local<v8::Value> error);
