@@ -115,6 +115,7 @@ type
     function GetDelphiClasstype: Pointer; virtual; stdcall; abstract;
     function GetPropName: PAnsiChar; virtual; stdcall; abstract;
     function GetPropIndex: integer; virtual; stdcall; abstract;
+    function GetPropIndexIValue: IValue; virtual; stdcall; abstract;
 
     procedure SetGetterResultUndefined; virtual; stdcall; abstract;
     procedure SetGetterResultIntf(p: Pointer); virtual; stdcall; abstract;
@@ -136,6 +137,7 @@ type
     function GetDelphiClasstype: Pointer; virtual; stdcall; abstract;
     function GetPropName: PAnsiChar; virtual; stdcall; abstract;
     function GetPropIndex: integer; virtual; stdcall; abstract;
+    function GetPropIndexIValue: IValue; virtual; stdcall; abstract;
     function GetValue: IValue; virtual; stdcall; abstract;
 
     function GetValueAsObject: TObject; overload; virtual; stdcall; abstract;
@@ -232,7 +234,7 @@ type
     function NewValue(val: PAnsiChar): IValue; overload; virtual; stdcall; abstract;
     function NewValue(val: boolean): IValue; overload; virtual; stdcall; abstract;
     function NewRecord: IRecord; virtual; stdcall; abstract;
-    function NewObject(obj: Pointer; dClasstype: Pointer): IValue; virtual; stdcall; abstract;
+    function NewObject(obj: Pointer; dClasstype: Pointer): IObject; virtual; stdcall; abstract;
     function NewInterfaceObject(p: Pointer): IValue; virtual; stdcall; abstract;
 
   end;
@@ -245,9 +247,4 @@ type
   procedure FinalizeNode(); cdecl; external 'node.dll' delayed;
 
 implementation
-
-initialization
-
-finalization
-    FinalizeNode;
 end.

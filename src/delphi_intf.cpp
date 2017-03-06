@@ -7,18 +7,18 @@
 
 namespace Bv8 {
 
+const char * dObjectToStringDelimiter = " ";
+const int dObjectToStringDelimiterLength = 1;
+
+const std::string dObjectToStringIdentifier = "[object DObject] ";
+
 namespace Bazis {
 	bool nodeInitialized = false;
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
 	{
 		try {
-			if (!nodeInitialized) {
-				std::vector<char *> args;
-				args.push_back("");
-				node::InitIalize(1, args.data());
-				nodeInitialized = true;
-			}
+            InitializeNode();
 			return new IEngine(DEngine);
 		}
 		catch(node::V8Exception &e){
@@ -58,6 +58,14 @@ namespace Bazis {
 			nodeInitialized = false;
 		}
 	}
+    // this class makes node finalization (node initializes when first engine is created)
+    class Finalizer {
+    public:
+        Finalizer() {};
+        ~Finalizer() {
+            FinalizeNode();
+        };
+    } finalizeer;
 }
 
 IObjectTemplate * IEngine::GetObjectByClass(void * dClass)
@@ -156,6 +164,7 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 		v8::Local<v8::FunctionTemplate> methodCallBack = v8::FunctionTemplate::New(isolate, FuncCallBack, v8::External::New(isolate, method->call));
 		V8Object->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, method->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), methodCallBack);
 	}
+    V8Object->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, "toString", v8::NewStringType::kNormal).ToLocalChecked(), v8::FunctionTemplate::New(isolate, toStringCallBack));
 
 	for (auto &prop : obj->ind_props) {
 		V8Object->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
@@ -297,14 +306,6 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 			try {
 				auto func = val.As<v8::Function>();
 				std::vector<v8::Local<v8::Value>> argv = args->GeV8ValueVector();
-#ifdef DEBUG
-				for (auto i = argv.begin(); i != argv.end(); i++) {
-					v8::String::Utf8Value str(*i);
-					if (*str == "")
-						Throw_Exception("some message");
-				}
-#endif DEBUG;
-
 				auto func_result = func->Call(context, glo, argv.size(), argv.data());
 				if (!func_result.IsEmpty()) {
 					auto result_value = std::make_unique<IValue>(isolate, func_result.ToLocalChecked(), -1);
@@ -494,25 +495,31 @@ IRecord * IEngine::NewRecord()
     return result;
 }
 
-IValue * IEngine::NewObject(void * value, void * classtype)
+IObject * IEngine::NewObject(void * value, void * classtype)
 {
-	if (isolate) {
-		v8::Isolate::Scope scope(isolate);
-		IEngine * eng = IEngine::GetEngine(isolate);
-		IValue * result = nullptr;
-		auto dTempl = eng->GetObjectByClass(classtype);
-		if (dTempl) {
-			auto ctx = isolate->GetCurrentContext();
-			auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
-			auto obj = maybeObj.ToLocalChecked();
-			obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
-			obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
-			run_result_value = std::make_unique<IValue>(isolate, obj, -1);
-			result = run_result_value.get();
-			IValues.push_back(std::move(run_result_value));
-		}
-		return result;
-	}
+    if (isolate) {
+        v8::Isolate::Scope scope(isolate);
+        IEngine * eng = IEngine::GetEngine(isolate);
+        IObject * result = nullptr;
+        auto obj = FindObject(value, classtype, isolate);
+        if (obj.IsEmpty()) {
+            auto dTempl = eng->GetObjectByClass(classtype);
+            if (dTempl) {
+                auto ctx = isolate->GetCurrentContext();
+                auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+                obj = maybeObj.ToLocalChecked();
+                obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
+                obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
+                AddObject(value, classtype, obj, isolate);
+            }
+        }
+        if (!obj.IsEmpty()) {
+            run_result_object = std::make_unique<IObject>(isolate, obj);
+            result = run_result_object.get();
+            IValues.push_back(std::move(run_result_value));
+        }
+        return result;
+    }
 	return nullptr;
 }
 
@@ -692,8 +699,7 @@ void IEngine::NamedPropGetter(v8::Local<v8::String> property, const v8::Property
         return;
     v8::Isolate::Scope iso_scope(engine->isolate);
     if (engine->NamedPropGetterCall) {
-        v8::String::Utf8Value str(property);
-        auto getterArgs = new IGetterArgs(info, *str);      
+        auto getterArgs = new IGetterArgs(info, property);
         engine->NamedPropGetterCall(getterArgs);
         if (getterArgs->error != "")
             engine->Throw_Exception(getterArgs->error.c_str());
@@ -849,6 +855,26 @@ void IEngine::FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 	}
 }
 
+void IEngine::toStringCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
+{
+    auto iso = args.GetIsolate();
+    IEngine * engine = IEngine::GetEngine(iso);
+    if (engine) {
+        v8::Isolate::Scope iso_scope(engine->isolate);
+
+        auto js_object = args.Holder();
+
+        auto dObject = reinterpret_cast<uintptr_t>(engine->GetDelphiObject(js_object));
+        auto dClasstype = reinterpret_cast<uintptr_t>(engine->GetDelphiClasstype(js_object));
+
+        std::string str = dObjectToStringIdentifier + std::to_string(dObject) + dObjectToStringDelimiter + std::to_string(dClasstype);
+        args.GetReturnValue().Set(v8::String::NewFromUtf8(iso, str.c_str(), v8::NewStringType::kNormal).ToLocalChecked());
+        
+    }
+}
+
+
+
 void IEngine::Throw_Exception(const char * error_msg)
 {
 	auto iso = v8::Isolate::GetCurrent();
@@ -955,7 +981,11 @@ inline bool IValue::ArgIsString() {
 
 bool IValue::ArgIsObject()
 {
-	return GetV8Value()->IsObject();
+    auto result = GetV8Value()->IsObject();
+    if (!result)
+        if (GetObjectFromString())
+            result = true;
+    return result;
 }
 bool IValue::ArgIsArray()
 {
@@ -989,7 +1019,7 @@ inline bool IValue::GetArgAsBool() {
 
 inline char * IValue::GetArgAsString() {
 	v8::Isolate::Scope scope(Isolate());
-	v8::String::Utf8Value str(GetV8Value()->ToDetailString());
+	v8::String::Utf8Value str(GetV8Value()->ToString());
 	char *it1 = *str;
 	char *it2 = *str + str.length();
 	auto vec = std::vector<char>(it1, it2);
@@ -1010,7 +1040,7 @@ IObject * IValue::GetArgAsObject()
 			obj = new IObject(Isolate(), maybeobj.ToLocalChecked());
 		}
 		else
-			return nullptr;
+			obj = GetObjectFromString();
 	}
 	return obj;
 }
@@ -1045,6 +1075,28 @@ IFunction * IValue::GetArgAsFunction()
 int IValue::GetIndex()
 {
 	return ind;
+}
+
+IObject * IValue::GetObjectFromString()
+{
+    if (!obj) {
+        if (GetV8Value()->IsString()) {
+            v8::Isolate::Scope iso_scope(Isolate());
+            v8::String::Utf8Value strUTF8(GetV8Value()->ToString());
+            std::string str = *strUTF8;            
+            auto pos = str.find(dObjectToStringIdentifier);
+            if (pos != std::string::npos) {
+                str.erase(pos, dObjectToStringIdentifier.length());
+                pos = str.find(dObjectToStringDelimiter);
+                auto substr = str.substr(0, pos);
+                int dObjectPointer = std::atoi(substr.c_str());                
+                substr = str.substr(pos + dObjectToStringDelimiterLength);
+                int dClasstype = std::atoi(substr.c_str());
+                obj = IEngine::GetEngine(Isolate())->NewObject((void *)(dObjectPointer), (void *)dClasstype);                           
+            }
+        }
+    }
+    return obj;
 }
 
 IValue::IValue(v8::Isolate * iso, v8::Local<v8::Value> val, int index): IBaseValue(iso, val)
@@ -1318,6 +1370,14 @@ IGetterArgs::IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, char *
 	iso = info.GetIsolate();
 }
 
+IGetterArgs::IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, v8::Local<v8::Value> index)
+{
+    IsIndexedProp = true;
+    propinfo = &info;
+    iso = info.GetIsolate();
+    indexValue = new IValue(iso, index, -1);
+}
+
 IGetterArgs::IGetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, int index)
 {
 	IsIndexedProp = true;
@@ -1355,6 +1415,11 @@ char * IGetterArgs::GetPropName()
 int IGetterArgs::GetPropIndex()
 {
 	return propInd;
+}
+
+IValue * IGetterArgs::GetPropIndexAsIValue()
+{
+    return indexValue;
 }
 
 void IGetterArgs::SetGetterResultUndefined()
@@ -1481,13 +1546,12 @@ ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<void>& info, char * prop
 	setterVal = new IValue(iso, newVal, 0);
 }
 
-ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, v8::Local<v8::Value> value, v8::Local<v8::Value> newValue)
+ISetterArgs::ISetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, v8::Local<v8::Value> index, v8::Local<v8::Value> newValue)
 {
     IsIndexedProp = true;
-    v8::String::Utf8Value str(value);
-    propName = *str;
     indexedPropInfo = &info;
     iso = info.GetIsolate();
+    indexVal = new IValue(iso, index, -1);
     newVal = newValue;
     setterVal = new IValue(iso, newVal, 0);
 }
@@ -1551,6 +1615,11 @@ char * ISetterArgs::GetPropName()
 int ISetterArgs::GetPropIndex()
 {
 	return propInd;
+}
+
+IValue * ISetterArgs::GetPropIndexAsIValue()
+{
+    return indexVal;
 }
 
 IValue * ISetterArgs::GetValue()
@@ -1746,63 +1815,62 @@ void IRecord::SetStringField(char * name, char * val)
 
 void IRecord::SetObjectField(char * name, void * val)
 {
-	auto object = GetV8Object();
-	object->CreateDataProperty(GetCurrentContext(),
-		v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked(),
-		v8::External::New(Isolate(), val));
+	if (val){
+		auto object = GetV8Object();
+		object->CreateDataProperty(GetCurrentContext(),
+			v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked(),
+			v8::External::New(Isolate(), val));
+	}
 }
 
 void IRecord::SetValueField(char * name, IBaseValue * val)
 {
-    auto object = GetV8Object();
-    object->CreateDataProperty(GetCurrentContext(),
-        v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked(),
-        val->GetV8Value());
+    if (val) {
+        auto object = GetV8Object();
+        object->CreateDataProperty(GetCurrentContext(),
+            v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked(),
+            val->GetV8Value());
+    }
 }
 
 int IRecord::GetIntField(char * name)
 {
-	auto object = GetV8Object();
-	auto val = object->GetRealNamedProperty(GetCurrentContext(),
-		v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked()).ToLocalChecked();
+	auto val = GetField(name);
 	return val->Int32Value(GetCurrentContext()).FromMaybe(0);
 }
 
 double IRecord::GetDoubleField(char * name)
 {
-	auto object = GetV8Object();
-	auto val = object->GetRealNamedProperty(GetCurrentContext(),
-		v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked()).ToLocalChecked();
+	auto val = GetField(name);
 	return val->NumberValue(GetCurrentContext()).FromMaybe(0.0);
 }
 
 bool IRecord::GetBoolField(char * name)
 {
-	auto object = GetV8Object();
-	auto val = object->GetRealNamedProperty(GetCurrentContext(),
-		v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked()).ToLocalChecked();
+    auto val = GetField(name);
 	return val->BooleanValue(GetCurrentContext()).FromMaybe(false);
 }
 
 char * IRecord::GetStringField(char * name)
 {
-	auto object = GetV8Object();
-	auto val = object->GetRealNamedProperty(GetCurrentContext(),
-		v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked()).ToLocalChecked();
-	v8::String::Utf8Value str(val->ToString(GetCurrentContext()).ToLocalChecked());
-	char *it1 = *str;
-	char *it2 = *str + str.length();
-	auto vec = std::vector<char>(it1, it2);
-	run_string_result = vec;
-	run_string_result.push_back(0);
+    auto val = GetField(name);
+    run_string_result = std::vector<char>();
+    v8::Isolate::Scope iso_scope(Isolate());
+    auto maybeVal = val->ToString(GetCurrentContext());
+    if (!maybeVal.IsEmpty()) {
+        v8::String::Utf8Value str(maybeVal.ToLocalChecked());
+        char *it1 = *str;
+        char *it2 = *str + str.length();
+        auto vec = std::vector<char>(it1, it2);
+        run_string_result = vec;
+        run_string_result.push_back(0);
+    };
 	return run_string_result.data();
 }
 
 void * IRecord::GetObjectField(char * name)
 {
-	auto object = GetV8Object();
-	auto val = object->GetRealNamedProperty(GetCurrentContext(),
-		v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked()).ToLocalChecked();
+    auto val = GetField(name);
 	if (val->IsExternal())
 		return val.As<v8::External>()->Value();
 	return nullptr;
@@ -1811,6 +1879,18 @@ void * IRecord::GetObjectField(char * name)
 v8::Local<v8::Object> IRecord::GetV8Object()
 {
     return GetV8Value()->ToObject(GetCurrentContext()).ToLocalChecked();
+}
+
+v8::Local<v8::Value> IRecord::GetField(char * name)
+{
+    v8::Isolate::Scope iso_scope(Isolate());
+    auto result = v8::Local<v8::Value>();
+    auto object = GetV8Object();
+    auto maybeVal = object->GetRealNamedProperty(GetCurrentContext(),
+        v8::String::NewFromUtf8(Isolate(), name, v8::NewStringType::kNormal).ToLocalChecked());
+    if (!maybeVal.IsEmpty())
+        result = maybeVal.ToLocalChecked();
+    return result;
 }
 
 IFunction::IFunction(v8::Local<v8::Function> function, v8::Isolate * isolate)

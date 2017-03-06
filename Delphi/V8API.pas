@@ -452,7 +452,7 @@ end;
 
   function TValueToJSValue(val: TValue; Eng: IEngine; IntfList: IInterfaceList): IBaseValue;
 
-    function MakeObject: IValue;
+    function MakeObject: IObject;
     var
       obj: TObject;
       objClasstype: TClass;
@@ -607,6 +607,7 @@ end;
         (ValueType.TypeKind in tkProperties) then
         Result.SetField(PAnsiChar(UTF8String(Field.Name)),
           TValueToJSValue(Field.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
+    end;
 
     PropArr := RecDescr.GetProperties;
     for Prop in PropArr do
@@ -615,7 +616,6 @@ end;
       if (Prop.Visibility = mvPublic) and (Assigned(ValueType)) and (ValueType.TypeKind in tkProperties) then
         Result.SetField(PAnsiChar(UTF8String(Field.Name)),
           TValueToJSValue(Prop.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
-      end;
     end;
   end;
 
