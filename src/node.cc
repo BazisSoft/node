@@ -3159,6 +3159,8 @@ void SetupProcessObject(Environment* env,
     READONLY_PROPERTY(process,
                       "_eval",
                       String::NewFromUtf8(env->isolate(), eval_string));
+    //set to default for next scripts
+    eval_string = nullptr;
   }
 
   ////
@@ -3166,6 +3168,8 @@ void SetupProcessObject(Environment* env,
     READONLY_PROPERTY(process,
                       "_filename",
                       String::NewFromUtf8(env->isolate(), filename_string));
+    //set to default for next scripts
+    filename_string = nullptr;
   }
 
   // -p, --print
