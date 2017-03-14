@@ -614,7 +614,7 @@ end;
     begin
       ValueType := Prop.PropertyType;
       if (Prop.Visibility = mvPublic) and (Assigned(ValueType)) and (ValueType.TypeKind in tkProperties) then
-        Result.SetField(PAnsiChar(UTF8String(Field.Name)),
+        Result.SetField(PAnsiChar(UTF8String(Prop.Name)),
           TValueToJSValue(Prop.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
     end;
   end;

@@ -199,7 +199,7 @@ type
 
   IEngine = class(IEngineIntf)
     function AddGlobal(dClass: Pointer; dObject: TObject): IObjectTemplate; virtual; stdcall; abstract;
-    function AddObject(classtype: PAnsiChar; dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
+    function AddObject(classtype: PAnsiChar; dObject: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function GetObject(dClass: Pointer): IObjectTemplate; virtual; stdcall; abstract;
     function ClassIsRegistered(dClass: Pointer): boolean; virtual; stdcall; abstract;
 
