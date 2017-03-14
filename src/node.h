@@ -201,7 +201,7 @@ NODE_EXTERN void Init(int* argc,
 class NodeEngine {
 public:
 	////variables for keep script alive after running all code;
-//	ArrayBufferAllocator array_buffer_allocator;
+	void * array_buffer_allocator;
 	void * script_params_ptr;
 	void * env_wrapper_ptr;
 	void * iso_data_wrapper_ptr;

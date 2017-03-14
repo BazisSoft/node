@@ -4422,7 +4422,7 @@ private:
 
 //
 //Isolate * isolate = nullptr;
-ArrayBufferAllocator array_buffer_allocator;
+//ArrayBufferAllocator array_buffer_allocator;
 //ScriptParams * script_params;
 //EnvWrapeer * env_wrapper;
 //IsolateDataWrapper * iso_data_wrapper;
@@ -4433,7 +4433,8 @@ NodeEngine::NodeEngine()
 	node_started = false;
 	//node_engine_isolate = nullptr;
 	Isolate::CreateParams params;
-	params.array_buffer_allocator = &array_buffer_allocator;
+    array_buffer_allocator = new ArrayBufferAllocator();
+	params.array_buffer_allocator = static_cast<ArrayBufferAllocator *>(array_buffer_allocator);
 	node_engine_isolate = Isolate::New(params);
 	script_params_ptr = new ScriptParams(node_engine_isolate);
 }
@@ -4471,7 +4472,7 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 
   {	  
 	  auto iso_data_wrapper = new IsolateDataWrapper(node_engine_isolate, instance_data->event_loop(),
-		  array_buffer_allocator.zero_fill_field());
+          static_cast<ArrayBufferAllocator *>(array_buffer_allocator)->zero_fill_field());
 	  iso_data_wrapper_ptr = iso_data_wrapper;
 	  auto global = Local<ObjectTemplate>();
 	  if (eng) {
