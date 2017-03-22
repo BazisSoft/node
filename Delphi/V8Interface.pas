@@ -239,6 +239,9 @@ type
 
   end;
 
+  function GetMajorVersion: Integer cdecl; external 'node.dll' delayed;
+  function GetMinorVersion: Integer cdecl; external 'node.dll' delayed;
+
   function InitEngine(DEngine: TObject): IEngine cdecl; external 'node.dll' delayed;
 
   function InitGlobalEngine(DEngine: TObject): IEngine cdecl; external 'node.dll' delayed;

@@ -505,6 +505,9 @@ const int ObjectInternalFieldCount = 2;
 
 namespace Bazis {
 extern "C" {
+    BZINTF int BZDECL GetMajorVersion();
+    BZINTF int BZDECL GetMinorVersion();
+
 	BZINTF IEngine* BZDECL InitEngine(void * DEngine);
 
 	BZINTF IEngine* BZDECL InitGlobalEngine(void * DEngine);

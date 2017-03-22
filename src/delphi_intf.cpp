@@ -15,6 +15,16 @@ const std::string dObjectToStringIdentifier = "[object DObject] ";
 namespace Bazis {
 	bool nodeInitialized = false;
 
+    BZINTF int BZDECL GetMajorVersion()
+    {
+        return 0;
+    }
+
+    BZINTF int BZDECL GetMinorVersion()
+    {
+        return 0;
+    }
+
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
 	{
 		try {

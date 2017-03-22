@@ -155,6 +155,8 @@ type
     function RunFile(fileName, scriptPath: string): string;
     function RunIncludeFile(FileName: string): string;
     procedure AddIncludeCode(code: UTF8String);
+    class function GetMajor: Integer;
+    class function GetFullVersion: string;
   end;
 
 
@@ -1229,6 +1231,16 @@ begin
   FGarbageCollector.Free;
   FClassList.Free;
   FIgnoredExceptions.Free;
+end;
+
+class function TJSEngine.GetFullVersion: string;
+begin
+  Result := IntToStr(GetMajorVersion) + '.' + IntToStr(GetMinorVersion);
+end;
+
+class function TJSEngine.GetMajor: Integer;
+begin
+  Result := GetMajorVersion;
 end;
 
 class function TJSEngine.GetMethodInfo(List: TRttiMethodList;
