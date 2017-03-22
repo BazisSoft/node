@@ -1938,8 +1938,10 @@ void IFunction::AddArgAsObject(void * value, void * classtype)
 IValue * IFunction::CallFunction()
 {
 	v8::Isolate::Scope scope(iso);
-	if (returnVal)
+	if (returnVal){
 		returnVal->Delete();
+		returnVal = nullptr;
+	}
 	auto res = func.Get(iso)->Call(iso->GetCurrentContext(), func.Get(iso), argv.size(), argv.data());
 	if (!res.IsEmpty()) {
 		returnVal = new IValue(iso, res.ToLocalChecked(), 0);
