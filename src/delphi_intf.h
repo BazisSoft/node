@@ -375,6 +375,7 @@ public:
 	virtual char * APIENTRY RunIncludeCode(char * code);
 	virtual void APIENTRY AddIncludeCode(char * code);
 	virtual IValue * APIENTRY CallFunc(char * funcName, IValueArray * args);
+    virtual void APIENTRY SetInactive();
 
 	virtual void APIENTRY SetDebug(bool debug, char * arg);
 	bool DebugMode();

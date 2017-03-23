@@ -209,6 +209,7 @@ type
     function RunIncludeCode(code: PAnsiChar): PAnsiChar; virtual; stdcall; abstract;
     procedure AddIncludeCode(code: PAnsiChar); virtual; stdcall; abstract;
     function CallFunc(FuncName: PAnsiChar; args: IValuesArray): IValue; virtual; stdcall; abstract;
+    procedure SetInactive; virtual; stdcall; abstract;
 
     procedure SetDebug(debug: boolean; arg: PAnsiChar); virtual; stdcall; abstract;
     function ErrorCode: integer; virtual; stdcall; abstract;
