@@ -107,7 +107,7 @@ type
     FDebugPort: string;
     FNodeEngineCreated, FInactive: boolean;
     FAdParams: string;
-
+    FVars: TDictionary<string, TValue>;
     FInitError: string;
 
     const NODE_AVAILABLE_VER = 0;
@@ -147,9 +147,11 @@ type
     function AddClass(cType: TClass): TJSClass;
     function AddGlobal(global: TObject): TJSClass;
     procedure RegisterHelper(CType: TClass; HelperType: TJSExtClass);
+    procedure DeclareVar(const Name: string; Variable: TValue);
 
-    function CallFunction(name: string; Args: array of TValue): TValue; overload;
-    function CallFunction(name: string; Args: array of Variant): Variant; overload;
+    function CallFunction(const Name: string; Args: array of TValue): TValue; overload;
+    function CallFunction(const Name: string; Args: array of Variant): Variant; overload;
+    function CallFunction(const Name: string): Variant; overload;
 
     property ScriptLog: TStrings read FLog;
     procedure SetLog(const Value: TStrings);
@@ -289,6 +291,7 @@ var
   ReturnClass: TClass;
   i: Integer;
 begin
+  Assert(FGlobalTemplate = nil);
   cType := global.ClassType;
   FGlobal := global;
   ClassTemplate := TJSClass.Create(cType);
@@ -450,7 +453,7 @@ begin
     end;
 end;
 
-function TJSEngine.CallFunction(name: string; Args: array of Variant): Variant;
+function TJSEngine.CallFunction(const Name: string; Args: array of Variant): Variant;
 var
   JsArgs: IValuesArray;
   count, i: integer;
@@ -471,7 +474,7 @@ begin
   end;
 end;
 
-function TJSEngine.CallFunction(name: string; Args: array of TValue): TValue;
+function TJSEngine.CallFunction(const Name: string; Args: array of TValue): TValue;
 var
   JsArgs: IValuesArray;
   count, i: integer;
@@ -646,7 +649,7 @@ begin
       obj := args.GetDelphiObject;
       Prop.SetValue(obj, [args.GetPropIndex], JsValToTValue(args.GetValue, Prop.PropertyType));
     except
-      on E:  EVariantTypeCastError do
+      on E: EVariantTypeCastError do
       begin
         Exit;
       end;
@@ -810,6 +813,7 @@ var
   obj: TObject;
   Helper: TJSClassExtender;
   PropInfo: TPropInfo;
+  FoundVar: boolean;
 begin
   //invoke right method of right object;
   cl := TClass(args.GetDelphiClasstype);
@@ -819,24 +823,30 @@ begin
   if Assigned(Eng) then
     try
       ClassDescr := Eng.FClasses.Items[cl];
+      FoundVar := False;
       if cl = Eng.FGlobal.ClassType then
       begin
+        if Eng.FVars.TryGetValue(PUtf8CharToString(args.GetPropName), Result) then
+          FoundVar := True;
         obj := Eng.FGlobal
       end
       else
       begin
         obj := args.GetDelphiObject;
       end;
-      PropInfo := ClassDescr.FProps.Items[PUtf8CharToString(args.GetPropName)];
-      helper := PropInfo.propObj;
-      if Assigned(Helper) then
+      if not FoundVar then
       begin
-        helper.Source := obj;
-        Result := PropInfo.prop.GetValue(helper);
-        Helper.Source := nil;
-      end
-      else
-        Result := PropInfo.prop.GetValue(obj);
+        PropInfo := ClassDescr.FProps.Items[PUtf8CharToString(args.GetPropName)];
+        helper := PropInfo.propObj;
+        if Assigned(Helper) then
+        begin
+          helper.Source := obj;
+          Result := PropInfo.prop.GetValue(helper);
+          Helper.Source := nil;
+        end
+        else
+          Result := PropInfo.prop.GetValue(obj);
+      end;
       args.SetGetterResult(TValueToJSValue(Result, Eng.FEngine, Eng.FDispatchList));
     except
       on E: EVariantTypeCastError do
@@ -1160,6 +1170,7 @@ begin
   FIgnoredExceptions.Add(EScriptEngineException);
   FDispatchList := TInterfaceList.Create;
   FEnumList := TList<PTypeInfo>.Create;
+  FVars := TDictionary<string, TValue>.Create();
   try
     if NodeLibAvailable then
       FEngine := InitEngine(Self)
@@ -1194,6 +1205,14 @@ begin
   end;
 end;
 
+procedure TJSEngine.DeclareVar(const Name: string; Variable: TValue);
+begin
+  FVars.Add(Name, Variable);
+  Assert(Assigned(FGlobalTemplate));
+  FGlobalTemplate.SetProp(PAnsiChar(UTF8String(Name)),
+      TObject(FVars.Count - 1), True, True);
+end;
+
 destructor TJSEngine.Destroy;
 begin
   FEnumList.Free;
@@ -1207,6 +1226,7 @@ begin
   FGarbageCollector.Free;
   FClassList.Free;
   FIgnoredExceptions.Free;
+  FVars.Free;
 end;
 
 class function TJSEngine.GetFullVersion: string;
@@ -1579,6 +1599,20 @@ procedure TJSEngine.TryFinishScript;
 begin
   FInactive := True;
   FEngine.SetInactive;
+end;
+
+function TJSEngine.CallFunction(const Name: string): Variant;
+var
+  JsArgs: IValuesArray;
+begin
+  Result := '';
+  if not FInactive then
+  begin
+    JsArgs := FEngine.NewArray(0);
+    if not Assigned(JsArgs) then
+      raise EScriptEngineException.Create('Can not create an array to call a function');
+    Result := JsValToTValue(CallFunction(name, JsArgs)).AsVariant;
+  end;
 end;
 
 { TJSClass }
