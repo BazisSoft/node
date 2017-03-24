@@ -3371,7 +3371,7 @@ static void RawDebug(const FunctionCallbackInfo<Value>& args) {
 }
 
 
-void LoadEnvironment(Environment* env) {
+void LoadEnvironment(Environment* env, bool firstLoading) {
   HandleScope handle_scope(env->isolate());
 
   env->isolate()->SetFatalErrorHandler(node::OnFatalError);
@@ -3410,18 +3410,19 @@ void LoadEnvironment(Environment* env) {
 
   // Add a reference to the global object
   Local<Object> global = env->context()->Global();
-
+  if (firstLoading) {
 #if defined HAVE_DTRACE || defined HAVE_ETW
-  InitDTrace(env, global);
+    InitDTrace(env, global);
 #endif
 
 #if defined HAVE_LTTNG
-  InitLTTNG(env, global);
+    InitLTTNG(env, global);
 #endif
 
 #if defined HAVE_PERFCTR
-  InitPerfCounters(env, global);
+    InitPerfCounters(env, global);
 #endif
+  }
 
   // Enable handling of uncaught exceptions
   // (FatalException(), break on uncaught exception in debugger)
@@ -4393,6 +4394,7 @@ public:
 		ctx = Context::New(iso, NULL, global);
 		return ctx;
 	}
+	Local<Context> GetContext() { return ctx; };
 	NodeInstanceData * GetInstanceData() { return instance_data; };
 
 private:
@@ -4420,20 +4422,12 @@ private:
 	IsolateData isolate_data;
 };
 
-//
-//Isolate * isolate = nullptr;
-ArrayBufferAllocator array_buffer_allocator;
-//ScriptParams * script_params;
-//EnvWrapeer * env_wrapper;
-//IsolateDataWrapper * iso_data_wrapper;
-////
-
 NodeEngine::NodeEngine()
 {
 	node_started = false;
-	//node_engine_isolate = nullptr;
 	Isolate::CreateParams params;
-	params.array_buffer_allocator = &array_buffer_allocator;
+    array_buffer_allocator = new ArrayBufferAllocator();
+	params.array_buffer_allocator = static_cast<ArrayBufferAllocator *>(array_buffer_allocator);
 	node_engine_isolate = Isolate::New(params);
 	script_params_ptr = new ScriptParams(node_engine_isolate);
 }
@@ -4444,7 +4438,6 @@ NodeEngine::~NodeEngine()
 	//it should be there, but now it throws an exception
 	delete static_cast<ScriptParams *>(script_params_ptr);
 	node_engine_isolate->Dispose();
-	//node_engine_isolate = nullptr;
 }
 
 //static v8::Isolate * node_engine_isolate;
@@ -4465,94 +4458,82 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 
   Isolate::Scope iso_scope(node_engine_isolate);
 
+
+  auto iso_data_wrapper = new IsolateDataWrapper(node_engine_isolate, instance_data->event_loop(),
+    static_cast<ArrayBufferAllocator *>(array_buffer_allocator)->zero_fill_field());
+  iso_data_wrapper_ptr = iso_data_wrapper;
+
   if (track_heap_objects) {
-	  node_engine_isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
+	node_engine_isolate->GetHeapProfiler()->StartTrackingHeapObjects(true);
   }
 
-  {	  
-	  auto iso_data_wrapper = new IsolateDataWrapper(node_engine_isolate, instance_data->event_loop(),
-		  array_buffer_allocator.zero_fill_field());
-	  iso_data_wrapper_ptr = iso_data_wrapper;
-	  auto global = Local<ObjectTemplate>();
-	  if (eng) {
-		  IEngine	* engine = static_cast<IEngine *>(eng);
-		  global = engine->MakeGlobalTemplate(node_engine_isolate);
-		  node_engine_isolate->SetData(EngineSlot, engine);
-	  }
-	  auto script_params = static_cast<ScriptParams *>(script_params_ptr);
-	  auto context = script_params->CreateContext(node_engine_isolate, global);
+  bool wasInitialized = initialized;
+  if (!initialized) {
+    InitEngine(arg, eng);
+  }
+  auto script_params = static_cast<ScriptParams *>(script_params_ptr);
+  auto context = script_params->GetContext();
 
-	  if (eng) {
-		  IEngine	* engine = static_cast<IEngine *>(eng);
-		  auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked();
-		  if (engine->globalTemplate) {
-			  globalObject->SetInternalField(0, v8::External::New(node_engine_isolate, engine->globObject));
-			  globalObject->SetInternalField(1, v8::External::New(node_engine_isolate, engine->globalTemplate->DClass));
-		  }
-	  }
-	  ////make enter manually without Context::Scope, and context will exit when delphi engine will be destroyed;	
-	  context->Enter();
-	  auto env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
-	  env_wrapper_ptr = env_wrapper;
-	  Environment *env = env_wrapper->GetEnvironment();
-	  env->Start(instance_data->argc(),
-		  instance_data->argv(),
-		  instance_data->exec_argc(),
-		  instance_data->exec_argv(),
-		  v8_is_profiling);
+  ////make enter manually without Context::Scope, and context will exit when delphi engine will be destroyed;	
+  context->Enter();
+  auto env_wrapper = new EnvWrapeer(iso_data_wrapper->GetData(), context);
+  env_wrapper_ptr = env_wrapper;
+  Environment * env = env_wrapper->GetEnvironment();
+  env->Start(instance_data->argc(),
+    instance_data->argv(),
+    instance_data->exec_argc(),
+    instance_data->exec_argv(),
+    v8_is_profiling);
 
-	  node_started = true;
+  node_started = true;
+  if (!wasInitialized) {
+    node_engine_isolate->SetAbortOnUncaughtExceptionCallback(
+      ShouldAbortOnUncaughtException);
+  }
+  // Start debug agent when argv has --debug
+  if (instance_data->use_debug_agent())
+    StartDebug(env, debug_wait_connect);
 
-	  node_engine_isolate->SetAbortOnUncaughtExceptionCallback(
-		  ShouldAbortOnUncaughtException);
+  {
+    Environment::AsyncCallbackScope callback_scope(env);
+    LoadEnvironment(env, !wasInitialized);
+  }
+  env->set_trace_sync_io(trace_sync_io);
 
-	  // Start debug agent when argv has --debug
-	  if (instance_data->use_debug_agent())
-		  StartDebug(env, debug_wait_connect);
+  // Enable debugger
+  if (instance_data->use_debug_agent())
+    EnableDebug(env);
 
-	  {
-		  Environment::AsyncCallbackScope callback_scope(env);
-		  LoadEnvironment(env);
-	  }
-	  env->set_trace_sync_io(trace_sync_io);
+  if (eng) {
+    //execution of 'pre-code'
+    IEngine	* engine = static_cast<IEngine *>(eng);
+    engine->ExecIncludeCode(context);
+  }
 
-	  // Enable debugger
-	  if (instance_data->use_debug_agent())
-		  EnableDebug(env);
+  {
+	SealHandleScope seal(node_engine_isolate);
+	bool more;
+	do {
+		v8_platform.PumpMessageLoop(node_engine_isolate);
+		more = uv_run(env->event_loop(), UV_RUN_ONCE);
 
-	  if (eng) {
-		  //execution of 'pre-code'
-		  IEngine	* engine = static_cast<IEngine *>(eng);
-		  engine->ExecIncludeCode(context);
-	  }
+		if (more == false) {
+			v8_platform.PumpMessageLoop(node_engine_isolate);
+			EmitBeforeExit(env);
 
-	  {
-		  SealHandleScope seal(node_engine_isolate);
-		  bool more;
-		  do {
-			  v8_platform.PumpMessageLoop(node_engine_isolate);
-			  more = uv_run(env->event_loop(), UV_RUN_ONCE);
-
-			  if (more == false) {
-				  v8_platform.PumpMessageLoop(node_engine_isolate);
-				  EmitBeforeExit(env);
-
-				  // Emit `beforeExit` if the loop became alive either after emitting
-				  // event, or after running some callbacks.
-				  more = uv_loop_alive(env->event_loop());
-				  if (uv_run(env->event_loop(), UV_RUN_NOWAIT) != 0)
-					  more = true;
-			  }
-		  } while (more == true);
-	  }
+			// Emit `beforeExit` if the loop became alive either after emitting
+			// event, or after running some callbacks.
+			more = uv_loop_alive(env->event_loop());
+			if (uv_run(env->event_loop(), UV_RUN_NOWAIT) != 0)
+				more = true;
+		}
+	} while (more == true);
   }
 }
 
 void NodeEngine::StopNodeInstance() {
-	//return;
 	if (!node_started)
 		return;
-	//auto isolate = isolate;
 	auto ctx = node_engine_isolate->GetCurrentContext();
 	if (*ctx)
 		ctx->Exit();
@@ -4724,6 +4705,34 @@ NODE_EXTERN int NodeEngine::RunScript(int argc, char * argv[], std::function<voi
 NODE_EXTERN void NodeEngine::StopScript()
 {
 	StopNodeInstance();
+}
+
+void NodeEngine::InitEngine(void * arg, void * eng)
+{
+    using namespace Bv8;
+    if (!node_engine_isolate) {
+        throw V8Exception();
+    }
+    {
+        auto global = Local<ObjectTemplate>();
+        if (eng) {
+            IEngine	* engine = static_cast<IEngine *>(eng);
+            global = engine->MakeGlobalTemplate(node_engine_isolate);
+            node_engine_isolate->SetData(EngineSlot, engine);
+        }
+        auto script_params = static_cast<ScriptParams *>(script_params_ptr);
+        auto context = script_params->CreateContext(node_engine_isolate, global);
+
+        if (eng) {
+            IEngine	* engine = static_cast<IEngine *>(eng);
+            auto globalObject = context->Global()->GetPrototype()->ToObject(context).ToLocalChecked();
+            if (engine->globalTemplate) {
+                globalObject->SetInternalField(0, v8::External::New(node_engine_isolate, engine->globObject));
+                globalObject->SetInternalField(1, v8::External::New(node_engine_isolate, engine->globalTemplate->DClass));
+            }
+        }
+    }
+    initialized = true;
 }
 
 NODE_EXTERN void Dispose()

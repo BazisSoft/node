@@ -333,6 +333,11 @@ IValue * IEngine::CallFunc(char * funcName, IValueArray * args)
 	return nullptr;
 }
 
+void IEngine::SetInactive()
+{
+    isolate->SetData(EngineSlot, nullptr);
+}
+
 void IEngine::SetDebug(bool debug, char * arg)
 {
 	debugMode = debug;

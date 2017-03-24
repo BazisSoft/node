@@ -201,7 +201,7 @@ NODE_EXTERN void Init(int* argc,
 class NodeEngine {
 public:
 	////variables for keep script alive after running all code;
-//	ArrayBufferAllocator array_buffer_allocator;
+	void * array_buffer_allocator;
 	void * script_params_ptr;
 	void * env_wrapper_ptr;
 	void * iso_data_wrapper_ptr;
@@ -216,7 +216,10 @@ public:
 	NODE_EXTERN int RunScript(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
 	NODE_EXTERN void StopScript();
 private:
+	//initialize global object and context (only once) for this engine
+	void InitEngine(void* arg, void* eng);
 	bool node_started;
+	bool initialized = false;
 };
 
 class IsolateData;
@@ -234,7 +237,7 @@ NODE_EXTERN Environment* CreateEnvironment(IsolateData* isolate_data,
                                            int exec_argc,
                                            const char* const* exec_argv);
 
-NODE_EXTERN void LoadEnvironment(Environment* env);
+NODE_EXTERN void LoadEnvironment(Environment* env, bool firstLoading = true);
 NODE_EXTERN void FreeEnvironment(Environment* env);
 
 NODE_EXTERN void EmitBeforeExit(Environment* env);
