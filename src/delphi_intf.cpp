@@ -22,7 +22,7 @@ namespace Bazis {
 
     BZINTF int BZDECL GetMinorVersion()
     {
-        return 0;
+        return 1;
     }
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
