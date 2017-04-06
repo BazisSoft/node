@@ -1208,6 +1208,10 @@ end;
 procedure TJSEngine.DeclareVar(const Name: string; Variable: TValue);
 begin
   FVars.Add(Name, Variable);
+  if Variable.IsObject then
+  begin
+    AddClass(Variable.AsObject.ClassType);
+  end;
   Assert(Assigned(FGlobalTemplate));
   FGlobalTemplate.SetProp(PAnsiChar(UTF8String(Name)),
       TObject(FVars.Count - 1), True, True);
