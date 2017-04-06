@@ -19,6 +19,8 @@ type
   //attribute for callback 'SetFunction' method
   TCallBackFuncAttr = class(TCustomAttribute);
 
+  TCallBackPropAttr = class(TCustomAttribute);
+
   TAttrClass = class of TCustomAttribute;
 {\ATTRIBUTES}
 
