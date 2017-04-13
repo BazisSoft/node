@@ -336,7 +336,7 @@ end;
       end;                      //maybe check for length shouldn't be
     if Assigned(rightMethod) and (Length(rightMethod.GetParameters) = 1) then
     begin
-      if (val.IsUndefined) then
+      if (not val.IsV8Function) then
         callBack := nil
       else
         callBack := TJSValueRef.Create(val);
