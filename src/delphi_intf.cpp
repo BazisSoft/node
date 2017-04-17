@@ -240,6 +240,10 @@ char * IEngine::RunFile(char * fName, char * exeName, char * additionalParams)
 	try {
 		int argc = 0;
 		auto argv = MakeArgs(fName, true, argc, exeName, additionalParams);
+        std::string filePath = fName;
+        size_t pos = filePath.find_last_of("\\/");
+        filePath = (std::string::npos == pos)? "" : filePath.substr(0, pos);
+        uv_chdir(filePath.c_str());
 		node_engine->RunScript(argc, argv.data(), [this](int code) {this->SetErrorCode(code); }, this);
 	}
 	catch (node::V8Exception &e) {
