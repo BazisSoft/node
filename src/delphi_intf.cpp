@@ -22,7 +22,7 @@ namespace Bazis {
 
     BZINTF int BZDECL GetMinorVersion()
     {
-        return 2;
+        return 3;
     }
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
@@ -158,12 +158,13 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 {
 	obj->FieldCount = ObjectInternalFieldCount;
 	auto V8Object = v8::FunctionTemplate::New(isolate);
+    V8Object->SetClassName(v8::String::NewFromUtf8(isolate, obj->classTypeName.c_str(), v8::NewStringType::kNormal).ToLocalChecked());
 	for (auto &field : obj->fields) {
-		V8Object->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, field.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+		V8Object->InstanceTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, field.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
 			FieldGetter, FieldSetter);
 	}
 	for (auto &prop : obj->props) {
-		V8Object->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+		V8Object->InstanceTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
 			prop->read? Getter : (v8::AccessorGetterCallback)0,
 			prop->write? Setter : (v8::AccessorSetterCallback)0, 
 			v8::External::New(isolate, prop->obj));
@@ -172,20 +173,20 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 	auto inc = 0;
 	for (auto &method : obj->methods) {
 		v8::Local<v8::FunctionTemplate> methodCallBack = v8::FunctionTemplate::New(isolate, FuncCallBack, v8::External::New(isolate, method->call));
-		V8Object->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, method->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), methodCallBack);
+		V8Object->InstanceTemplate()->Set(v8::String::NewFromUtf8(isolate, method->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(), methodCallBack);
 	}
-    V8Object->PrototypeTemplate()->Set(v8::String::NewFromUtf8(isolate, "toString", v8::NewStringType::kNormal).ToLocalChecked(), v8::FunctionTemplate::New(isolate, toStringCallBack));
+    V8Object->InstanceTemplate()->Set(v8::String::NewFromUtf8(isolate, "toString", v8::NewStringType::kNormal).ToLocalChecked(), v8::FunctionTemplate::New(isolate, toStringCallBack));
 
 	for (auto &prop : obj->ind_props) {
-		V8Object->PrototypeTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
+		V8Object->InstanceTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, prop->name.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
 			prop->read ? IndexedPropObjGetter : (v8::AccessorGetterCallback)0, (v8::AccessorSetterCallback)0,
 			v8::External::New(isolate, prop->obj));
 	}
 
 	if (obj->HasIndexedProps) {
-		V8Object->PrototypeTemplate()->SetIndexedPropertyHandler(IndexedPropGetter, IndexedPropSetter);
+		V8Object->InstanceTemplate()->SetIndexedPropertyHandler(IndexedPropGetter, IndexedPropSetter);
 	}
-	V8Object->PrototypeTemplate()->SetInternalFieldCount(obj->FieldCount);
+	V8Object->InstanceTemplate()->SetInternalFieldCount(obj->FieldCount);
 	obj->objTempl = V8Object;
 	return V8Object;
 }
@@ -525,8 +526,9 @@ IObject * IEngine::NewObject(void * value, void * classtype)
             auto dTempl = eng->GetObjectByClass(classtype);
             if (dTempl) {
                 auto ctx = isolate->GetCurrentContext();
-                auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+                auto maybeObj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx);
                 obj = maybeObj.ToLocalChecked();
+                obj->SetPrototype(dTempl->objTempl->GetFunction(ctx).ToLocalChecked());
                 obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
                 obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
                 AddObject(value, classtype, obj, isolate);
@@ -659,7 +661,9 @@ v8::Local<v8::ObjectTemplate> IEngine::MakeGlobalTemplate(v8::Isolate * iso)
 		global->PrototypeTemplate()->SetInternalFieldCount(ObjectInternalFieldCount);
 	};
 	for (auto &obj : objects) {
-		auto V8Object = AddV8ObjectTemplate(obj.get());
+        auto classInfo = obj.get();
+		auto V8ObjectTemplate = AddV8ObjectTemplate(classInfo);
+        global->PrototypeTemplate()->Set(isolate, classInfo->classTypeName.c_str(), V8ObjectTemplate);
 	}
 	return global->PrototypeTemplate();
 }
@@ -960,6 +964,7 @@ void IObjectTemplate::SetParent(IObjectTemplate * parent)
 
 IObjectTemplate::IObjectTemplate(std::string objclasstype, v8::Isolate * isolate)
 {
+    classTypeName = objclasstype;
 	iso = isolate;
 }
 
@@ -1206,7 +1211,7 @@ void IMethodArgs::SetReturnValueClass(void * value, void* dClasstype)
 		auto dTempl = eng->GetObjectByClass(dClasstype);
 		if (dTempl) {
 			auto ctx = iso->GetCurrentContext();
-			auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+			auto maybeObj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx);
 			if (!maybeObj.IsEmpty()) {
 				auto obj = maybeObj.ToLocalChecked();
 				obj->SetIntegrityLevel(ctx, v8::IntegrityLevel::kSealed);
@@ -1485,7 +1490,7 @@ void IGetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 		auto dTempl = eng->GetObjectByClass(dClasstype);
 		if (dTempl) {
 			auto ctx = iso->GetCurrentContext();
-			auto obj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx).ToLocalChecked();
+			auto obj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx).ToLocalChecked();
 			obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
 			obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
 			eng->AddObject(value, dClasstype, obj, iso);
@@ -1730,7 +1735,7 @@ void ISetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 		auto dTempl = eng->GetObjectByClass(dClasstype);
 		if (dTempl) {
 			auto ctx = iso->GetCurrentContext();
-			auto obj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx).ToLocalChecked();
+			auto obj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx).ToLocalChecked();
 			obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
 			obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, dClasstype));
 			eng->AddObject(value, dClasstype, obj, iso);
@@ -1946,7 +1951,7 @@ void IFunction::AddArgAsObject(void * value, void * classtype)
 	auto dTempl = eng->GetObjectByClass(classtype);
 	if (dTempl) {
 		auto ctx = iso->GetCurrentContext();
-		auto maybeObj = dTempl->objTempl->PrototypeTemplate()->NewInstance(ctx);
+		auto maybeObj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx);
 		auto obj = maybeObj.ToLocalChecked();
 		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
 		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, classtype));
