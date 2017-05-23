@@ -1260,7 +1260,8 @@ begin
   begin
     method := List[i];
     PArams := method.Method.GetParameters;
-    if count = Length(PArams) then
+    //check args if their count equals or less than method params count
+    if count <= Length(PArams) then
     begin
       Correct := True;
       for k := 0 to count - 1 do
