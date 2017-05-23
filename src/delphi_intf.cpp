@@ -4,13 +4,13 @@
 #include <sstream>
 #include <fstream>
 #include <streambuf>
+#include <regex>
 
 namespace Bv8 {
 
 const char * dObjectToStringDelimiter = " ";
 const int dObjectToStringDelimiterLength = 1;
 
-const std::string dObjectToStringIdentifier = "[object DObject] ";
 
 namespace Bazis {
 	bool nodeInitialized = false;
@@ -890,7 +890,8 @@ void IEngine::toStringCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
         auto dObject = reinterpret_cast<uintptr_t>(engine->GetDelphiObject(js_object));
         auto dClasstype = reinterpret_cast<uintptr_t>(engine->GetDelphiClasstype(js_object));
 
-        std::string str = dObjectToStringIdentifier + std::to_string(dObject) + dObjectToStringDelimiter + std::to_string(dClasstype);
+        v8::String::Utf8Value cTypeName(js_object->GetConstructorName());
+        std::string str = "[object " + std::string(*cTypeName) + "] " + std::to_string(dObject) + dObjectToStringDelimiter + std::to_string(dClasstype);
         args.GetReturnValue().Set(v8::String::NewFromUtf8(iso, str.c_str(), v8::NewStringType::kNormal).ToLocalChecked());
         
     }
@@ -1103,20 +1104,19 @@ int IValue::GetIndex()
 
 IObject * IValue::GetObjectFromString()
 {
+    std::regex objectString("\\[object *(\\w+)\\] *(\\d+) *(\\d+)");
     if (!obj) {
         if (GetV8Value()->IsString()) {
             v8::Isolate::Scope iso_scope(Isolate());
             v8::String::Utf8Value strUTF8(GetV8Value()->ToString());
-            std::string str = *strUTF8;            
-            auto pos = str.find(dObjectToStringIdentifier);
-            if (pos != std::string::npos) {
-                str.erase(pos, dObjectToStringIdentifier.length());
-                pos = str.find(dObjectToStringDelimiter);
-                auto substr = str.substr(0, pos);
-                int dObjectPointer = std::atoi(substr.c_str());                
-                substr = str.substr(pos + dObjectToStringDelimiterLength);
-                int dClasstype = std::atoi(substr.c_str());
-                obj = IEngine::GetEngine(Isolate())->NewObject((void *)(dObjectPointer), (void *)dClasstype);                           
+            std::string str = *strUTF8;
+            std::smatch match;
+            if (std::regex_search(str, match, objectString)) {
+                std::string match1 = match[2];
+                std::string match2 = match[3];
+                int dObjectPointer = std::atoi(match1.c_str());
+                int dClasstype = std::atoi(match2.c_str());
+                obj = IEngine::GetEngine(Isolate())->NewObject((void *)(dObjectPointer), (void *)dClasstype);
             }
         }
     }
