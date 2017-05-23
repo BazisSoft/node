@@ -337,6 +337,8 @@ public:
 	virtual void APIENTRY SetParent(IObjectTemplate * parent);
 
 	void * DClass = nullptr;
+    std::string classTypeName;
+
 	v8::Local<v8::FunctionTemplate> objTempl;
 	std::vector<std::unique_ptr<IObjectProp>> props;
 	std::vector<std::unique_ptr<IObjectProp>> ind_props;
