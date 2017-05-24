@@ -528,7 +528,6 @@ IObject * IEngine::NewObject(void * value, void * classtype)
                 auto ctx = isolate->GetCurrentContext();
                 auto maybeObj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx);
                 obj = maybeObj.ToLocalChecked();
-                obj->SetPrototype(dTempl->objTempl->GetFunction(ctx).ToLocalChecked());
                 obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
                 obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(isolate, classtype));
                 AddObject(value, classtype, obj, isolate);
@@ -1948,14 +1947,20 @@ void IFunction::AddArgAsObject(void * value, void * classtype)
 	//argv.push_back(v8::External::New(iso, obj));
 	//// it should work
 	IEngine * eng = IEngine::GetEngine(iso);
-	auto dTempl = eng->GetObjectByClass(classtype);
-	if (dTempl) {
-		auto ctx = iso->GetCurrentContext();
-		auto maybeObj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx);
-		auto obj = maybeObj.ToLocalChecked();
-		obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
-		obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, classtype));
-		argv.push_back(obj);
+	auto result = eng->FindObject(value, classtype, iso);
+	if (!result.IsEmpty()) {
+		argv.push_back(result);
+	}
+	else {
+		auto dTempl = eng->GetObjectByClass(classtype);
+		if (dTempl) {
+			auto ctx = iso->GetCurrentContext();
+			auto maybeObj = dTempl->objTempl->InstanceTemplate()->NewInstance(ctx);
+			auto obj = maybeObj.ToLocalChecked();
+			obj->SetInternalField(DelphiObjectIndex, v8::External::New(iso, value));
+			obj->SetInternalField(DelphiClassTypeIndex, v8::External::New(iso, classtype));
+			argv.push_back(obj);
+		}
 	}
 }
 
