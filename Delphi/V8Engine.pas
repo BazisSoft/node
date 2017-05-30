@@ -154,6 +154,7 @@ type
     function CallFunction(const Name: string): Variant; overload;
 
     property ScriptLog: TStrings read FLog;
+    property Inactive: boolean read FInactive;
     procedure SetLog(const Value: TStrings);
 
     property Debug: boolean read FDebug write SetDebug;
