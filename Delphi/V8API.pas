@@ -28,9 +28,10 @@ type
   [TCallBackAttr]
   TJSCallback = record
   strict private
-    FVal: ICallableMethod;
     FCallResult: TValue;
   public
+    [TCallBackPropAttr]
+    FVal: ICallableMethod;
     [TCallBackFuncAttr]
     procedure SetFunction(value: ICallableMethod);
     function Call: boolean; overload;
@@ -67,14 +68,17 @@ type
   function TValueToDispatch(val: TValue): IDispatch;
   function TValueArrayToJSArray(initArray: array of TValue;
     resArray: IValuesArray; Eng: IEngine; IntfList: IInterfaceList): boolean;
-  function TValueToArray(val: TValue; Eng: IEngine; IntfList: IInterfaceList): IValuesArray;
-  function TValueToJSRecord(recVal: TValue; Eng: IEngine; IntfList: IInterfaceList;
-    RecDescr: TRttiType = nil): IRecord;
+  function TValueToArray(val: TValue; Eng: IEngine;
+    IntfList: IInterfaceList): IValuesArray;
+  function TryAsJSCallback(val: TValue; RecDescr: TRttiType;
+    out jsVal: IBaseValue): Boolean;
+  function TValueToJSRecord(recVal: TValue; Eng: IEngine;
+    IntfList: IInterfaceList; RecDescr: TRttiType = nil): IBaseValue;
 
   function PUtf8CharToString(s: PAnsiChar): string;
 
   function TypeHasAttribute(typ: TRttiType; attrClass: TAttrClass): boolean;
-  function MethodHasAttribute(method: TRttiMethod; attrClass: TAttrClass): boolean;
+  function HasAttribute(member: TRttiMember; attrClass: TAttrClass): boolean;
 
   function ExecuteOnDispatchMultiParamProp(TargetObj: IDispatch;
     PropName: string; writeValue: TValue; var IsProperty: boolean): TValue;
@@ -325,14 +329,14 @@ end;
     MethodArr := typ.GetMethods;
     rightMethod := nil;
     for method in MethodArr do
-      if MethodHasAttribute(method, TCallBackFuncAttr) then
+      if HasAttribute(method, TCallBackFuncAttr) then
       begin
         rightMethod := method;
         break;
-      end;
+      end;                      //maybe check for length shouldn't be
     if Assigned(rightMethod) and (Length(rightMethod.GetParameters) = 1) then
     begin
-      if (val.IsUndefined) then
+      if (not val.IsV8Function) then
         callBack := nil
       else
         callBack := TJSValueRef.Create(val);
@@ -510,7 +514,13 @@ end;
       tkUnknown: Result := nil;
       tkInteger: Result := Eng.NewValue(val.AsInteger);
       tkChar: Result := Eng.NewValue(PAnsiChar(UTF8String(val.AsString)));
-      tkEnumeration: Result := Eng.NewValue(val.AsOrdinal);
+      tkEnumeration:
+      begin
+        if val.IsType<Boolean> then
+          Result := Eng.NewValue(val.AsBoolean)
+        else
+          Result := Eng.NewValue(val.AsOrdinal);
+      end;
       tkFloat: Result := Eng.NewValue(val.AsExtended);
       tkString: Result := Eng.NewValue(PAnsiChar(Utf8String(val.AsString)));
       tkSet: ;
@@ -587,35 +597,69 @@ end;
 //    end;
   end;
 
+  function TryAsJSCallback(val: TValue; RecDescr: TRttiType;
+    out jsVal: IBaseValue): Boolean;
+  var
+    CallBackValue: TJSValueRef;
+    FieldArr: TArray<TRttiField>;
+    Field: TRttiField;
+    FieldResult: TValue;
+  begin
+    Result := False;
+    jsVal := nil;
+    if not Assigned(RecDescr) then
+      RecDescr := TRttiContext.Create.GetType(val.TypeInfo);
+    if TypeHasAttribute(RecDescr, TCallBackAttr) then
+    begin
+      FieldArr := RecDescr.GetFields;
+      for Field in FieldArr do
+        if HasAttribute(Field, TCallBackPropAttr) then
+        begin
+          FieldResult := Field.GetValue(val.GetReferenceToRawData);
+          if not FieldResult.IsEmpty and FieldResult.IsType<TJSValueRef> then
+          begin
+            CallBackValue := FieldResult.AsObject as TJSValueRef;
+            jsVal := CallBackValue.Value;
+            Result := true;
+          end;
+        end;
+    end;
+  end;
+
   function TValueToJSRecord(recVal: TValue; Eng: IEngine; IntfList: IInterfaceList;
-    RecDescr: TRttiType): IRecord;
+    RecDescr: TRttiType): IBaseValue;
   var
     FieldArr: TArray<TRttiField>;
     Field: TRttiField;
     PropArr: TArray<TRttiProperty>;
     Prop: TRttiProperty;
     ValueType: TRttiType;
+    Rec: IRecord;
   begin
     if not Assigned(RecDescr) then
       RecDescr := TRttiContext.Create.GetType(recVal.TypeInfo);
-    Result := Eng.NewRecord;
-    FieldArr := RecDescr.GetFields;
-    for Field in FieldArr do
+    if not TryAsJSCallback(recVal, RecDescr, Result) then
     begin
-      ValueType := Field.FieldType;
-      if (Field.Visibility = mvPublic) and (Assigned(ValueType)) and
-        (ValueType.TypeKind in tkProperties) then
-        Result.SetField(PAnsiChar(UTF8String(Field.Name)),
-          TValueToJSValue(Field.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
-    end;
+      Rec := Eng.NewRecord;
+      FieldArr := RecDescr.GetFields;
+      for Field in FieldArr do
+      begin
+        ValueType := Field.FieldType;
+        if (Field.Visibility = mvPublic) and (Assigned(ValueType)) and
+          (ValueType.TypeKind in tkProperties) then
+          Rec.SetField(PAnsiChar(UTF8String(Field.Name)),
+            TValueToJSValue(Field.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
+      end;
 
-    PropArr := RecDescr.GetProperties;
-    for Prop in PropArr do
-    begin
-      ValueType := Prop.PropertyType;
-      if (Prop.Visibility = mvPublic) and (Assigned(ValueType)) and (ValueType.TypeKind in tkProperties) then
-        Result.SetField(PAnsiChar(UTF8String(Prop.Name)),
-          TValueToJSValue(Prop.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
+      PropArr := RecDescr.GetProperties;
+      for Prop in PropArr do
+      begin
+        ValueType := Prop.PropertyType;
+        if (Prop.Visibility = mvPublic) and (Assigned(ValueType)) and (ValueType.TypeKind in tkProperties) then
+          Rec.SetField(PAnsiChar(UTF8String(Prop.Name)),
+            TValueToJSValue(Prop.GetValue(recVal.GetReferenceToRawData), Eng, IntfList));
+      end;
+      Result := Rec;
     end;
   end;
 
@@ -636,13 +680,13 @@ end;
         Exit(True)
   end;
 
-  function MethodHasAttribute(method: TRttiMethod; attrClass: TAttrClass): boolean;
+  function HasAttribute(member: TRttiMember; attrClass: TAttrClass): boolean;
   var
     Attributes: TArray<TCustomAttribute>;
     attr: TCustomAttribute;
   begin
     Result := False;
-    Attributes := method.GetAttributes;
+    Attributes := member.GetAttributes;
     for attr in Attributes do
       if Assigned(attr) and (attr is attrClass) then
         Exit(True)

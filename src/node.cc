@@ -3853,7 +3853,8 @@ static void DispatchDebugMessagesAsyncCallback(uv_async_t* handle) {
       Context::Scope context_scope(env->context());
 
       StartDebug(env, false);
-      EnableDebug(env);
+      if (debugger_running)
+        EnableDebug(env);
     }
 
     Isolate::Scope isolate_scope(isolate);

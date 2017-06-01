@@ -110,7 +110,7 @@ type
     FVars: TDictionary<string, TValue>;
     FInitError: string;
 
-    const NODE_AVAILABLE_VER = 0;
+    const NODE_AVAILABLE_VER = 1;
 
     procedure AddEnumToGlobal(Enum: TRttiType; global: IObjectTemplate);
     class procedure callMethod(args:IMethodArgs); static; stdcall;
@@ -154,6 +154,7 @@ type
     function CallFunction(const Name: string): Variant; overload;
 
     property ScriptLog: TStrings read FLog;
+    property Inactive: boolean read FInactive;
     procedure SetLog(const Value: TStrings);
 
     property Debug: boolean read FDebug write SetDebug;
@@ -1208,6 +1209,10 @@ end;
 procedure TJSEngine.DeclareVar(const Name: string; Variable: TValue);
 begin
   FVars.Add(Name, Variable);
+  if Variable.IsObject then
+  begin
+    AddClass(Variable.AsObject.ClassType);
+  end;
   Assert(Assigned(FGlobalTemplate));
   FGlobalTemplate.SetProp(PAnsiChar(UTF8String(Name)),
       TObject(FVars.Count - 1), True, True);
@@ -1256,7 +1261,8 @@ begin
   begin
     method := List[i];
     PArams := method.Method.GetParameters;
-    if count = Length(PArams) then
+    //check args if their count equals or less than method params count
+    if count <= Length(PArams) then
     begin
       Correct := True;
       for k := 0 to count - 1 do
