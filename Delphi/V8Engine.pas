@@ -110,7 +110,7 @@ type
     FVars: TDictionary<string, TValue>;
     FInitError: string;
 
-    const NODE_AVAILABLE_VER = 0;
+    const NODE_AVAILABLE_VER = 1;
 
     procedure AddEnumToGlobal(Enum: TRttiType; global: IObjectTemplate);
     class procedure callMethod(args:IMethodArgs); static; stdcall;
