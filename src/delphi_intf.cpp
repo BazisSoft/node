@@ -17,12 +17,12 @@ namespace Bazis {
 
     BZINTF int BZDECL GetMajorVersion()
     {
-        return 0;
+        return 1;
     }
 
     BZINTF int BZDECL GetMinorVersion()
     {
-        return 3;
+        return 0;
     }
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
