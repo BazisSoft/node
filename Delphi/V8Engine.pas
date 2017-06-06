@@ -1809,7 +1809,8 @@ begin
     if HasForbiddenAttribute(method.GetAttributes) then
       continue;
     if (method.MethodKind in [mkProcedure, mkFunction]) and
-      (method.Visibility = mvPublic) and (method.Parent.Handle.TypeData.ClassType <> TObject) then
+      (method.Visibility in [mvPublic, mvPublished]) and
+      (method.Parent.Handle.TypeData.ClassType <> TObject) then
     begin
       if not FMethods.TryGetValue(method.Name, overloads) then
       begin
@@ -1835,7 +1836,8 @@ begin
   begin
     if FProps.ContainsKey(prop.Name) or (not Assigned(prop.PropertyType)) then
       continue;
-    if (prop.PropertyType.TypeKind in tkProperties) and (prop.Visibility = mvPublic) then
+    if (prop.PropertyType.TypeKind in tkProperties) and
+      (prop.Visibility in [mvPublic, mvPublished]) then
     begin
       propInfo := TPropInfo.Create;
       propInfo.prop := prop;
@@ -1848,7 +1850,8 @@ begin
   begin
     if Fields.ContainsKey(field.Name) or (not Assigned(field.FieldType)) then
       continue;
-    if (field.FieldType.TypeKind in tkProperties) and (field.Visibility = mvPublic) then
+    if (field.FieldType.TypeKind in tkProperties) and
+      (field.Visibility in [mvPublic, mvPublished]) then
       FFields.Add(field.Name, field);
   end;
   IndPropArr := Ftype.GetIndexedProperties;
@@ -1856,7 +1859,8 @@ begin
   begin
     if FIndexedProps.ContainsKey(indProp.Name) or (not Assigned(indProp.PropertyType)) then
       continue;
-    if (indProp.PropertyType.TypeKind in tkProperties) and (indProp.Visibility = mvPublic) then
+    if (indProp.PropertyType.TypeKind in tkProperties) and
+      (indProp.Visibility in [mvPublic, mvPublished]) then
     begin
       FIndexedProps.Add(indProp.Name, indProp);
       if indProp.IsDefault then
