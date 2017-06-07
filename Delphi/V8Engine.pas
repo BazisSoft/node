@@ -167,7 +167,7 @@ type
     function RunIncludeFile(FileName: string): string;
     procedure AddIncludeCode(code: UTF8String);
     procedure TryFinishScript;
-    class function GetMajor: Integer;
+
     class function GetFullVersion: string;
   end;
 
@@ -227,6 +227,8 @@ var
   helper: TJSClassExtender;
 begin
   Result := nil;
+  if Inactive then
+    Exit;
   if (cType = FGlobal.ClassType) or (cType = TObject) then
     Exit;
   if not FClasses.TryGetValue(cType, JsClass) then
@@ -292,6 +294,9 @@ var
   ReturnClass: TClass;
   i: Integer;
 begin
+  Result := nil;
+  if Inactive then
+    Exit;
   Assert(FGlobalTemplate = nil);
   cType := global.ClassType;
   FGlobal := global;
@@ -347,6 +352,8 @@ var
   HelperObj: TJSClassExtender;
   objind: integer;
 begin
+  if Inactive then
+    Exit;
   if not FJSHelpers.ContainsKey(CType) then
   begin
     objind := FJSHelpersList.FindInstanceOf(HelperType);
@@ -459,6 +466,8 @@ var
   JsArgs: IValuesArray;
   count, i: integer;
 begin
+  if Inactive then
+    Exit;
   Result := '';
   if not FInactive then
   begin
@@ -481,6 +490,8 @@ var
   count, i: integer;
   resValue: IValue;
 begin
+  if Inactive then
+    Exit;
   Result := Tvalue.Empty;
   if not FInactive then
   begin
@@ -1208,6 +1219,8 @@ end;
 
 procedure TJSEngine.DeclareVar(const Name: string; Variable: TValue);
 begin
+  if Inactive then
+    Exit;
   FVars.Add(Name, Variable);
   if Variable.IsObject then
   begin
@@ -1237,11 +1250,6 @@ end;
 class function TJSEngine.GetFullVersion: string;
 begin
   Result := IntToStr(GetMajorVersion) + '.' + IntToStr(GetMinorVersion);
-end;
-
-class function TJSEngine.GetMajor: Integer;
-begin
-  Result := GetMajorVersion;
 end;
 
 class function TJSEngine.GetMethodInfo(List: TRttiMethodList;
@@ -1333,6 +1341,8 @@ end;
 
 procedure TJSEngine.AddIncludeCode(code: UTF8String);
 begin
+  if Inactive then
+    Exit;
   FEngine.AddIncludeCode(PAnsiChar(code));
 end;
 
@@ -1603,6 +1613,8 @@ end;
 
 procedure TJSEngine.TryFinishScript;
 begin
+  if Inactive then
+    Exit;
   FInactive := True;
   FEngine.SetInactive;
 end;
@@ -1611,6 +1623,8 @@ function TJSEngine.CallFunction(const Name: string): Variant;
 var
   JsArgs: IValuesArray;
 begin
+  if Inactive then
+    Exit;
   Result := '';
   if not FInactive then
   begin
