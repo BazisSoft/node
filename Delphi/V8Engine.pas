@@ -137,7 +137,7 @@ type
     function CallFunction(name: string; Args: IValuesArray): IValue; overload;
 
     procedure SetClassIntoContext(cl: TJSClass);
-    function ClassIsRegistered(cType: TClass): boolean;
+    function IsClassRegistered(cType: TClass): boolean;
 
     procedure SetDebug(const Value: boolean);
     procedure SetDebugPort(const Value: string);
@@ -1171,7 +1171,7 @@ begin
     end;
 end;
 
-function TJSEngine.ClassIsRegistered(cType: TClass): boolean;
+function TJSEngine.IsClassRegistered(cType: TClass): boolean;
 begin
   Result := FClasses.ContainsKey(cType);
 end;
@@ -1328,7 +1328,7 @@ begin
   if Assigned(eng) and (eng is TJSEngine) then
   begin
     Engine := eng as TJSEngine;
-    while Assigned(Result) and (not Engine.ClassIsRegistered(Result)) do
+    while Assigned(Result) and (not Engine.IsClassRegistered(Result)) do
     begin
       Result := Result.ClassParent;
     end;
