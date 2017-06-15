@@ -296,6 +296,7 @@ typedef void(APIENTRY *TGetterCallBack) (IGetterArgs * args);
 typedef void(APIENTRY *TSetterCallBack) (ISetterArgs * args);
 typedef void(APIENTRY *TIntfSetterCallBack) (IIntfSetterArgs * args);
 typedef void(APIENTRY *TErrorMsgCallBack) (const char * errMsg, void * DEngine);
+typedef void *(APIENTRY *TClassTypeChecker) (void * classType, void* dEngine);
 
 class IObjectProp : public IBazisIntf {
 public:
@@ -399,6 +400,7 @@ public:
 	virtual void APIENTRY SetInterfaceSetterPropCallBack(TIntfSetterCallBack callBack);
 	virtual void APIENTRY SetInterfaceMethodCallBack(TMethodCallBack callBack);
 	virtual void APIENTRY SetErrorMsgCallBack(TErrorMsgCallBack callback);
+	virtual void APIENTRY SetClassTypeChecker(TClassTypeChecker callBack);
 
 	virtual IValueArray * APIENTRY NewArray(int count);
 	virtual IValue * APIENTRY NewInteger(int value);
@@ -416,6 +418,7 @@ public:
 
 	virtual void* GetDelphiObject(v8::Local<v8::Object> holder);
 	virtual void* GetDelphiClasstype(v8::Local<v8::Object> obj);
+	void * GetRegisteredParentClasstype(void * classtype);
 
 	v8::Local<v8::Object> FindObject(void * dObj, void * classType, v8::Isolate * iso);
 	void AddObject(void * dObj, void * classType, v8::Local<v8::Object> obj, v8::Isolate * iso);
@@ -457,6 +460,7 @@ private:
 	TIntfSetterCallBack IFaceSetterPropCall;
 	TMethodCallBack IFaceMethodCall;
 	TErrorMsgCallBack ErrMsgCallBack;
+	TClassTypeChecker CheckClassType;
 	bool debugMode = false;
     char * debugArg = nullptr;
 	int errCode = 0;

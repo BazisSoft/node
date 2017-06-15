@@ -180,6 +180,7 @@ type
   TSetterCallBack = procedure(args: ISetterArgs); stdcall;
   TIntfSetterCallBack = procedure(args: IIntfSetterArgs); stdcall;
   TErrorMsgCallBack = procedure(errMsg: PAnsiChar; eng: TObject); stdcall;
+  TClassTypeChecker = function(cType: TClass; eng: TObject): TClass; stdcall;
 
   IObjectProp = class(IEngineIntf)
     procedure SetRead(read: boolean); virtual; stdcall; abstract;
@@ -228,6 +229,7 @@ type
     procedure SetInterfaceSetterCallBack(callBack: TIntfSetterCallBack); virtual; stdcall; abstract;
     procedure SetInterfaceMethodCallBack(callBack: TMethodCallBack); virtual; stdcall; abstract;
     procedure SetErrorMessageCallBack(callBack: TErrorMsgCallBack); virtual; stdcall; abstract;
+    procedure SetClassTypeChecker(callBack: TClassTypeChecker); virtual; stdcall; abstract;
 
     function NewArray(count: integer): IValuesArray; virtual; stdcall; abstract;
     function NewValue(val: integer): IValue; overload; virtual; stdcall; abstract;
