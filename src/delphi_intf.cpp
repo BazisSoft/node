@@ -447,6 +447,11 @@ void IEngine::SetErrorMsgCallBack(TErrorMsgCallBack callback)
 	ErrMsgCallBack = callback;
 }
 
+void IEngine::SetClassTypeChecker(TClassTypeChecker callBack)
+{
+	CheckClassType = callBack;
+}
+
 IValueArray * IEngine::NewArray(int count)
 {
 	if (isolate) {
@@ -521,6 +526,9 @@ IObject * IEngine::NewObject(void * value, void * classtype)
         v8::Isolate::Scope scope(isolate);
         IEngine * eng = IEngine::GetEngine(isolate);
         IObject * result = nullptr;
+		if (!eng->ClassIsRegistered(classtype)) {
+			classtype = eng->GetRegisteredParentClasstype(classtype);
+		}
         auto obj = FindObject(value, classtype, isolate);
         if (obj.IsEmpty()) {
             auto dTempl = eng->GetObjectByClass(classtype);
@@ -594,6 +602,11 @@ void * IEngine::GetDelphiClasstype(v8::Local<v8::Object> obj)
 	}
 	else
 		return nullptr;
+}
+
+void * IEngine::GetRegisteredParentClasstype(void * classtype)
+{
+	return CheckClassType(classtype, this->DEngine);
 }
 
 v8::Local<v8::Object> IEngine::FindObject(void * dObj, void * classType, v8::Isolate * iso)
@@ -1200,6 +1213,9 @@ void IMethodArgs::SetReturnValueClass(void * value, void* dClasstype)
 {
 	v8::Isolate * iso = args->GetIsolate();
 	IEngine * eng = IEngine::GetEngine(iso);
+	if (!eng->ClassIsRegistered(dClasstype)) {
+		dClasstype = eng->GetRegisteredParentClasstype(dClasstype);
+	}
 
 	auto result = eng->FindObject(value, dClasstype, iso);
 	if (!result.IsEmpty())
@@ -1479,6 +1495,9 @@ void IGetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 {
 	v8::Isolate * iso = propinfo->GetIsolate();
 	IEngine * eng = IEngine::GetEngine(iso);
+	if (!eng->ClassIsRegistered(dClasstype)) {
+		dClasstype = eng->GetRegisteredParentClasstype(dClasstype);
+	}
 	auto result = eng->FindObject(value, dClasstype, iso);
 	if (!result.IsEmpty())
 	{
@@ -1724,6 +1743,9 @@ void ISetterArgs::SetGetterResultDObject(void * value, void * dClasstype)
 {
 	v8::Isolate * iso = propinfo->GetIsolate();
 	IEngine * eng = IEngine::GetEngine(iso);
+	if (!eng->ClassIsRegistered(dClasstype)) {
+		dClasstype = eng->GetRegisteredParentClasstype(dClasstype);
+	}
 	auto result = eng->FindObject(value, dClasstype, iso);
 	if (!result.IsEmpty())
 	{
@@ -1944,9 +1966,10 @@ void IFunction::AddArgAsNumber(double val)
 
 void IFunction::AddArgAsObject(void * value, void * classtype)
 {
-	//argv.push_back(v8::External::New(iso, obj));
-	//// it should work
 	IEngine * eng = IEngine::GetEngine(iso);
+	if (!eng->ClassIsRegistered(classtype)) {
+		classtype = eng->GetRegisteredParentClasstype(classtype);
+	}
 	auto result = eng->FindObject(value, classtype, iso);
 	if (!result.IsEmpty()) {
 		argv.push_back(result);

@@ -130,10 +130,14 @@ type
     class procedure callIntfSetter(args: IIntfSetterArgs); static; stdcall;
     class procedure callIntfMethod(args: IMethodArgs); static; stdcall;
     class procedure SendErrToLog(errMsg: PAnsiChar; eng: TObject); static; stdcall;
-    class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs): TRttiMethodInfo;
+    class function GetRegisteredParentClasstype(cType: TClass;
+      eng: TObject): TClass; static; stdcall;
+    class function GetMethodInfo(List: TRttiMethodList; args: IMethodArgs):
+      TRttiMethodInfo;
     function CallFunction(name: string; Args: IValuesArray): IValue; overload;
 
     procedure SetClassIntoContext(cl: TJSClass);
+    function IsClassRegistered(cType: TClass): boolean;
 
     procedure SetDebug(const Value: boolean);
     procedure SetDebugPort(const Value: string);
@@ -1167,6 +1171,11 @@ begin
     end;
 end;
 
+function TJSEngine.IsClassRegistered(cType: TClass): boolean;
+begin
+  Result := FClasses.ContainsKey(cType);
+end;
+
 constructor TJSEngine.Create;
 begin
   FNodeEngineCreated := False;
@@ -1212,8 +1221,10 @@ begin
     FEngine.SetInterfaceGetterCallBack(callIntfGetter);
     FEngine.SetInterfaceSetterCallBack(callIntfSetter);
     FEngine.SetInterfaceMethodCallBack(callIntfMethod);
-    FEngine.SetErrorMessageCallBack(SendErrToLog);
     FEngine.SetIndexedPropGetterObjCallBack(callIndexedObjGetter);
+
+    FEngine.SetErrorMessageCallBack(SendErrToLog);
+    FEngine.SetClassTypeChecker(GetRegisteredParentClasstype);
   end;
 end;
 
@@ -1304,6 +1315,22 @@ begin
       end;
       if Correct then
         Exit(method)
+    end;
+  end;
+end;
+
+class function TJSEngine.GetRegisteredParentClasstype(cType: TClass;
+  eng: TObject): TClass;
+var
+  Engine: TJSEngine;
+begin
+  Result := cType;
+  if Assigned(eng) and (eng is TJSEngine) then
+  begin
+    Engine := eng as TJSEngine;
+    while Assigned(Result) and (not Engine.IsClassRegistered(Result)) do
+    begin
+      Result := Result.ClassParent;
     end;
   end;
 end;
