@@ -32,9 +32,6 @@ type
     function ToV2: TVector2;
   end;
 
-  TVectorList = class(TList<TVector3>)
-  end;
-
   //class with callback
   TCallBackClass = class
   private
@@ -53,6 +50,9 @@ type
     FSomeValue: Double;
   public
     property Value: Double read FSomeValue write FSomeValue;
+  end;
+
+  TSomeList = class(TList<TSomeObject>)
   end;
 
   TSomeChild = class(TSomeObject)
@@ -107,17 +107,20 @@ type
     procedure alert(str: string);
     property system: TJSSystemNamespace read GetSystem;
     [TGCAttr]
-    function NewVectorList: TVectorList;
-    [TGCAttr]
     function NewVector(x: double = 0; y: double = 0; z: double = 0): TVector3;
     [TGCAttr]
     function NewCallBackClass: TCallBackClass;
     [TGCAttr]
     function NewSomeObject: TSomeObject;
     [TGCAttr]
+    function NewSomeList: TSomeList;
+    [TGCAttr]
     function NewSomeChild: TSomeChild;
+    [TGCAttr]
+    function NewAttrObject: TSomeAttrObject;
+    [TGCAttr]
+    function NewForbiddenObject: TSomeForbiddenObject;
     function Length(vec: TVector3): double;
-    function Multiplicate(arg1, arg2: double; arg3: double = 1.0): double;
   end;
 
 implementation
@@ -237,9 +240,9 @@ begin
   FEng.ScriptLog.Add(str);
 end;
 
-function TGlobalNamespace.Multiplicate(arg1, arg2, arg3: double): double;
+function TGlobalNamespace.NewAttrObject: TSomeAttrObject;
 begin
-  Result := arg1 * arg2 * arg3;
+  Result := TSomeAttrObject.Create;
 end;
 
 function TGlobalNamespace.NewCallBackClass: TCallBackClass;
@@ -247,19 +250,24 @@ begin
   Result := TCallBackClass.Create;
 end;
 
+function TGlobalNamespace.NewForbiddenObject: TSomeForbiddenObject;
+begin
+  Result := TSomeForbiddenObject.Create;
+end;
+
 function TGlobalNamespace.NewSomeChild: TSomeChild;
 begin
   Result := TSomeChild.Create;
 end;
 
+function TGlobalNamespace.NewSomeList: TSomeList;
+begin
+  Result := TSomeList.Create;
+end;
+
 function TGlobalNamespace.NewSomeObject: TSomeObject;
 begin
   Result := TSomeObject.Create;
-end;
-
-function TGlobalNamespace.NewVectorList: TVectorList;
-begin
-  Result := TVectorList.Create;
 end;
 
 function TGlobalNamespace.Length(vec: TVector3): double;
