@@ -94,20 +94,33 @@ var
   k: integer;
   Func: IFunction;
   Obj: TObject;
+  Param: TValue;
 begin
   Func := Value.AsFunction;
   Result := False;
   for k := 0 to High(Params) do
-    case Params[k].Kind of
-      tkInteger: Func.AddArg(Params[k].AsInteger);
-      tkFloat: Func.AddArg(Params[k].AsExtended);
+  begin
+    Param := Params[k];
+    case Param.Kind of
+      tkUnknown: Func.AddArg(nil, nil);
+      tkInt64, tkInteger: Func.AddArg(Param.AsInteger);
+      tkFloat: Func.AddArg(Param.AsExtended);
+      tkEnumeration:
+      begin
+        if Param.IsType<Boolean> then
+          Func.AddArg(Param.AsBoolean)
+        else
+          Result := Func.AddArg(Param.AsOrdinal);
+      end;
       tkClass:
       begin
         Obj := Params[k].AsObject;
         Func.AddArg(Obj, obj.ClassType);
       end;
-      tkString: Func.AddArg(PAnsiChar(UTF8String(Params[k].AsString)));
+      tkWChar, tkChar, tkString, tkLString, tkWString, tkUString:
+        Func.AddArg(PAnsiChar(UTF8String(Params[k].AsString)));
     end;
+  end;
   Func.CallFunction;
 end;
 
