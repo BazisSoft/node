@@ -2,7 +2,7 @@ unit SampleClasses;
 
 interface
 
-uses ScriptInterface, Generics.Collections, RTTI, V8Engine;
+uses ScriptInterface, Generics.Collections, RTTI, V8Engine, ComObj;
 
 type
 
@@ -85,14 +85,6 @@ type
     function Get5: integer;
   end;
 
-  ISomeIntf = interface
-    function GetClassName: string;
-  end;
-
-  TSomeIntfObj = class(TInterfacedObject, ISomeIntf)
-    function GetClassName: string;
-  end;
-
   TGlobalNamespace = class
   private
     FEng: TJSEngine;
@@ -120,6 +112,7 @@ type
     function NewAttrObject: TSomeAttrObject;
     [TGCAttr]
     function NewForbiddenObject: TSomeForbiddenObject;
+    function NewCOMObject(const className: string): IDispatch;
     function Length(vec: TVector3): double;
   end;
 
@@ -201,13 +194,6 @@ begin
   Result := 5;
 end;
 
-{ ISomeIntfObj }
-
-function TSomeIntfObj.GetClassName: string;
-begin
-  Result := 'TsomeIntfObj';
-end;
-
 { TGlobalNamespace }
 
 procedure TGlobalNamespace.alert(str: string);
@@ -248,6 +234,11 @@ end;
 function TGlobalNamespace.NewCallBackClass: TCallBackClass;
 begin
   Result := TCallBackClass.Create;
+end;
+
+function TGlobalNamespace.NewCOMObject(const className: string): IDispatch;
+begin
+  Result := CreateOleObject(className);
 end;
 
 function TGlobalNamespace.NewForbiddenObject: TSomeForbiddenObject;
