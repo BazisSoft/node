@@ -110,7 +110,7 @@ begin
         if Param.IsType<Boolean> then
           Func.AddArg(Param.AsBoolean)
         else
-          Result := Func.AddArg(Param.AsOrdinal);
+          Func.AddArg(Param.AsOrdinal);
       end;
       tkClass:
       begin
