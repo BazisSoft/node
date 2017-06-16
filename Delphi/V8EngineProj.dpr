@@ -16,29 +16,82 @@ uses
   V8Engine in 'V8Engine.pas',
   ScriptInterface in 'ScriptInterface.pas';
 
+
+  procedure ParseParamsAndRun(Engine: TJSEngine);
+  var
+    i: integer;
+    Param: string;
+    DebugStr: string;
+    FileNameOrCode: string;
+    AdditionalParams: string;
+  begin
+    i := 1;
+    DebugStr := '';
+    FileNameOrCode := '';
+    while i < ParamCount do
+    begin
+      Param := ParamStr(i);
+      if Param = '' then
+      begin
+        Inc(i);
+        Continue;
+      end;
+      if (Param[1] = '-') and (Param[2] = '-') then
+      begin
+        Delete(Param, 1, 2);
+        Param := LowerCase(Param);
+        //it can be either '--debug' or '--debug-brk' param for debugging
+        //also it can be '--eval' param to evaluate file;
+        if (Pos('debug', Param) > 0) or (Param = 'eval') then
+        begin
+          DebugStr := ParamStr(i);
+          Inc(i);
+          if ParamCount >= i then
+          begin
+            FileNameOrCode := ParamStr(i);
+            Inc(i);
+            AdditionalParams := '';
+            while i < ParamCount do
+            begin
+              AdditionalParams := AdditionalParams + ParamStr(i) + #10#13;
+              Inc(i);
+            end;
+          end;
+        end;
+      end;
+      Inc(i)
+    end;
+    if FileNameOrCode <> '' then
+    begin
+      if DebugStr = '--eval' then
+      begin
+        //TODO: check if filename or code
+        Engine.RunFile(FileNameOrCode, ParamStr(0))
+      end
+      else
+      begin
+        Engine.Debug := True;
+        Engine.DebugPort := DebugStr;
+        Engine.RunFile(FileNameOrCode, ParamStr(0));
+      end;
+    end;
+  end;
+
 var
   Global: TGlobalNamespace;
-  code: TStrings;
   log: TStrings;
   Eng: TJSEngine;
-  s: string;
 begin
   Math.SetExceptionMask([exInvalidOp, exDenormalized, exZeroDivide, exOverflow,
     exUnderflow, exPrecision]);
   try
     Eng := TJSEngine.Create;
     log := TStringList.Create;
-    Eng.Debug := True;
     Eng.SetLog(log);
     Global := TGlobalNamespace.Create(Eng);
-    code := TStringList.Create;
     try
       Eng.AddGlobal(Global);
-//      Eng.RunScript('a = 2;// a++; system.log(a)', ParamStr(0));
-      code.LoadFromFile('..\scripts\tools\codeassist.js');
-      eng.RunScript(code.Text, ExtractFilePath(ParamStr(0)) + '..\scripts\tools\codeassist.js');
-      s := eng.CallFunction('computeProposals', ['a = 2;', 0, 1]);
-      Eng.ScriptLog.Add(s);
+      ParseParamsAndRun(Eng);
       // <<----send log to user-----
       if Assigned(Eng.ScriptLog) and (Eng.ScriptLog.Count > 0) then
       begin
@@ -54,7 +107,7 @@ begin
     end;
   except
     on e: Exception do
-      writeln('err');
+      writeln('error: ' + e.Message);
   end;
   Writeln;
   Writeln('Press Enter for Exit');
