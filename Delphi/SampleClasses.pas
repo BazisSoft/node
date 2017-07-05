@@ -101,6 +101,8 @@ type
     [TGCAttr]
     function NewVector(x: double = 0; y: double = 0; z: double = 0): TVector3;
     [TGCAttr]
+    function MakeVector(const coords: TArray<double>): TVector3;
+    [TGCAttr]
     function NewCallBackClass: TCallBackClass;
     [TGCAttr]
     function NewSomeObject: TSomeObject;
@@ -113,7 +115,7 @@ type
     [TGCAttr]
     function NewForbiddenObject: TSomeForbiddenObject;
     function NewCOMObject(const className: string): IDispatch;
-    function Length(vec: TVector3): double;
+    function VLength(vec: TVector3): double;
   end;
 
 implementation
@@ -226,6 +228,19 @@ begin
   FEng.ScriptLog.Add(str);
 end;
 
+function TGlobalNamespace.MakeVector(const coords: TArray<double>): TVector3;
+var
+  CoordLength: integer;
+begin
+  CoordLength := Length(coords);
+  case CoordLength of
+    0: Result := TVector3.Create(0, 0, 0);
+    1: Result := TVector3.Create(coords[0], 0, 0);
+    2: Result := TVector3.Create(coords[0], coords[1], 0);
+    else Result := TVector3.Create(coords[0], coords[1], coords[2]);
+  end;
+end;
+
 function TGlobalNamespace.NewAttrObject: TSomeAttrObject;
 begin
   Result := TSomeAttrObject.Create;
@@ -261,7 +276,7 @@ begin
   Result := TSomeObject.Create;
 end;
 
-function TGlobalNamespace.Length(vec: TVector3): double;
+function TGlobalNamespace.VLength(vec: TVector3): double;
 begin
   Result := vec.Length;
 end;
