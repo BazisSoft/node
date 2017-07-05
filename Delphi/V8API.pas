@@ -51,7 +51,8 @@ type
   function JSvalToRecordTValue(val: jsval; typ: TRttiType): TValue;
   function JSvalToCallBackRecord(val: jsval; typ: TRttiType): TValue;
   function DefaultTValue(typ: TRttiType): TValue;
-  function JSArrayToTValue(val: IValuesArray): TValue;
+  function JSArrayToTValue(val: IValuesArray): TValue; overload;
+  function JSArrayToTValue(val: IValuesArray; typ: PTypeInfo): TValue; overload;
 
   function JSValIsObject(v: jsval): Boolean;
 //  function JSValIsObjectClass(v: jsval; cl: TClass): Boolean;
@@ -254,6 +255,20 @@ end;
     Result := TValue.FromArray(Result.TypeInfo, TValueArr);
   end;
 
+  function JSArrayToTValue(val: IValuesArray; typ: PTypeInfo): TValue;
+  var
+    TValueArr: array of TValue;
+    i, count: integer;
+  begin
+    count := val.GetCount;
+    SetLength(TValueArr, count);
+    for i := 0 to count - 1 do
+    begin
+      TValueArr[i] := JsValToTValue(val.GetValue(i));
+    end;
+    Result := TValue.FromArray(typ, TValueArr);
+  end;
+
   function JsValToVariant(val: jsval): Variant;
   begin
     if not assigned(val) then
@@ -388,7 +403,7 @@ end;
       tkLString: Result := (UTF8ToUnicodeString(RawByteString(val.AsString)));
       tkWString: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
       tkVariant: Result := TValue.From<Variant>(JsValToVariant(val));
-      tkArray: ;
+      tkArray: Result := JSArrayToTValue(val.AsArray, typ.Handle);
       tkRecord:
       begin
         if TypeHasAttribute(typ, TCallBackAttr) then
@@ -398,7 +413,7 @@ end;
       end;
       tkInterface: ;
       tkInt64: Result := JSValToInt(val);
-      tkDynArray: ;
+      tkDynArray: Result := JSArrayToTValue(val.AsArray, typ.Handle);
 
       tkUString:
       begin
