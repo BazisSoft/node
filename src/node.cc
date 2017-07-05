@@ -4535,10 +4535,13 @@ void NodeEngine::StartNodeInstance(void* arg, void* eng) {
 void NodeEngine::StopNodeInstance() {
 	if (!node_started)
 		return;
-	auto ctx = node_engine_isolate->GetCurrentContext();
-	if (*ctx)
-		ctx->Exit();
-	node_engine_isolate->TerminateExecution();
+    {
+        HandleScope scope(node_engine_isolate);
+        auto ctx = node_engine_isolate->GetCurrentContext();
+        if (*ctx)
+            ctx->Exit();
+        node_engine_isolate->TerminateExecution();
+    }
 	auto instance_data = static_cast<ScriptParams *>(script_params_ptr)->GetInstanceData();
 	Environment * env = static_cast<EnvWrapeer *>(env_wrapper_ptr)->GetEnvironment();
     {
