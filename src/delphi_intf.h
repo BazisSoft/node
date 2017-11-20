@@ -143,6 +143,10 @@ public:
     virtual IRecord * APIENTRY GetArgAsRecord();
     virtual IFunction * APIENTRY GetArgAsFunction();
 
+    //avialble from 1.1 version
+    virtual bool APIENTRY ArgIsDInterface();
+    virtual void * APIENTRY GetArgAsDInterface();
+
     int GetIndex();
 private:
 

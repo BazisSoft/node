@@ -22,7 +22,7 @@ namespace Bazis {
 
     BZINTF int BZDECL GetMinorVersion()
     {
-        return 0;
+        return 1;
     }
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
@@ -549,6 +549,7 @@ IValue * IEngine::NewInterfaceObject(void * value)
         auto ctx = isolate->GetCurrentContext();
         v8::Local<v8::Object> obj = ifaceTemplate->NewInstance(ctx).ToLocalChecked();
         obj->SetInternalField(DelphiObjectIndex, v8::External::New(isolate, value));
+		obj->SetInternalField(DelphiClassTypeIndex, v8::Undefined(isolate));
         run_result_value = std::make_unique<IValue>(isolate, obj, -1);
         auto result = run_result_value.get();
         IValues.push_back(std::move(run_result_value));
@@ -1023,6 +1024,21 @@ bool IValue::ArgIsUndefined()
 {
 	return GetV8Value()->IsUndefined();
 }
+bool IValue::ArgIsDInterface()
+{
+	auto value = GetV8Value();
+	bool result = false;
+	if (value->IsObject()) {
+		auto obj = value->ToObject();
+		if (obj->InternalFieldCount() == ObjectInternalFieldCount) {
+			auto internal_field = obj->GetInternalField(DelphiClassTypeIndex);
+			if (internal_field->IsUndefined()) {
+				result = true;
+			}
+		}
+	}
+	return result;
+}
 //get arg 
 
 inline double IValue::GetArgAsNumber() {
@@ -1094,6 +1110,25 @@ IFunction * IValue::GetArgAsFunction()
 		func = new IFunction(GetV8Value().As<v8::Function>(), Isolate());
 	}
 	return func;
+}
+
+void * IValue::GetArgAsDInterface()
+{
+	auto value = GetV8Value();
+	void * result = nullptr;
+	if (value->IsObject()) {
+		auto obj = value->ToObject();
+		if (obj->InternalFieldCount() == ObjectInternalFieldCount) {
+			auto internal_field = obj->GetInternalField(DelphiClassTypeIndex);
+			if (internal_field->IsUndefined()) {
+				internal_field = obj->GetInternalField(DelphiObjectIndex);
+				if (internal_field->IsExternal()) {
+					result = internal_field.As<v8::External>()->Value();
+				}
+			}
+		}
+	}
+	return result;
 }
 
 int IValue::GetIndex()

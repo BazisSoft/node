@@ -256,8 +256,9 @@ end;
 
   function JsValToVariant(val: jsval): Variant;
   begin
-    if not assigned(val) then
-      Exit('');
+    Result := Unassigned;
+    if not assigned(val) or (val.IsUndefined) then
+      Exit;
     //checking for type
     if val.IsBool then
       Result := JSValToBoolean(val)
@@ -280,6 +281,8 @@ end;
       Result := JSValToInt(val)
     else if Val.IsNumber then
       Result := JSValToDouble(val)
+    else if (GetMinorVersion > 0) and (val.IsInterface) then
+      Result := TValue.From<IDispatch>(IDispatch(val.AsInterface))
     else if (val.IsObject) and (val.AsObject.IsDelphiObject) then
       Result := TValue.From<TObject>(JSValToObject(val).GetDelphiObject)
     else if val.IsArray then
@@ -788,13 +791,30 @@ end;
     ParamCount: Integer;
     i: integer;
     params: array of OleVariant;
+    ParamValue: TValue;
   begin
     Result := TValue.Empty;
     ParamCount := High(ParamValues) + 1;
     SetLength(params, ParamCount);
     for i := 0 to ParamCount - 1 do
     begin
-      Params[i] := paramValues[i].AsVariant;
+      ParamValue := paramValues[i];
+      case ParamValue.Kind of
+        tkInteger, tkChar, tkEnumeration, tkFloat,
+        tkString, tkWChar, tkLString, tkWString,
+        tkVariant, tkInt64, tkUString, tkPointer:
+          Params[i] := ParamValue.AsVariant;
+        tkSet: ;
+        tkClass: ;
+        tkMethod: ;
+        tkArray: ;
+        tkRecord: ;
+        tkInterface:
+          params[i] := TValueToDispatch(ParamValue);
+        tkDynArray: ;
+        tkClassRef: ;
+        tkProcedure: ;
+      end;
     end;
     wide := FuncName;
     // get dispid of requested method

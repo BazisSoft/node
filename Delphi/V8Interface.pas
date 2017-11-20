@@ -84,6 +84,10 @@ type
     function AsArray: IValuesArray; virtual; stdcall; abstract;
     function AsRecord: IRecord; virtual; stdcall; abstract;
     function AsFunction: IFunction; virtual; stdcall; abstract;
+
+    //avialble from 1.1 version
+    function IsInterface: boolean; virtual; stdcall; abstract;
+    function AsInterface: Pointer; virtual; stdcall; abstract;
   end;
 
   IMethodArgs = class (IEngineIntf)
