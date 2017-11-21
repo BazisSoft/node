@@ -225,12 +225,19 @@ function TJSEngine.AddClass(cType: TClass): TJSClass;
 var
   JsClass: TJSClass;
   helper: TJSClassExtender;
+  Parent: TClass;
 begin
   Result := nil;
   if Inactive then
     Exit;
   if (cType = FGlobal.ClassType) or (cType = TObject) then
     Exit;
+  Parent := cType.ClassParent;
+  while Assigned(Parent) and (Parent <> TObject) do
+  begin
+    AddClass(Parent);
+    Parent := Parent.ClassParent;
+  end;
   if not FClasses.TryGetValue(cType, JsClass) then
   begin
     if FClasses.ContainsKey(ctype) then

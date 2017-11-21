@@ -158,6 +158,10 @@ v8::Local<v8::FunctionTemplate> IEngine::AddV8ObjectTemplate(IObjectTemplate * o
 {
 	obj->FieldCount = ObjectInternalFieldCount;
 	auto V8Object = v8::FunctionTemplate::New(isolate);
+	auto parent = obj->parentTemplate;
+	if (parent && !parent->objTempl.IsEmpty()) {
+		V8Object->Inherit(parent->objTempl);
+	}
     V8Object->SetClassName(v8::String::NewFromUtf8(isolate, obj->classTypeName.c_str(), v8::NewStringType::kNormal).ToLocalChecked());
 	for (auto &field : obj->fields) {
 		V8Object->InstanceTemplate()->SetAccessor(v8::String::NewFromUtf8(isolate, field.c_str(), v8::NewStringType::kNormal).ToLocalChecked(),
@@ -961,6 +965,7 @@ void IObjectTemplate::SetHasIndexedProps(bool hasIndProps)
 
 void IObjectTemplate::SetParent(IObjectTemplate * parent)
 {
+	parentTemplate = parent;
 }
 
 IObjectTemplate::IObjectTemplate(std::string objclasstype, v8::Isolate * isolate)

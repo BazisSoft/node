@@ -352,6 +352,8 @@ public:
 
 	bool HasIndexedProps = false;
 	int FieldCount = 0;
+
+  IObjectTemplate * parentTemplate = nullptr;
 protected:
 	std::vector<char> runStringResult;
 private:
