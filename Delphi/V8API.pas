@@ -791,30 +791,13 @@ end;
     ParamCount: Integer;
     i: integer;
     params: array of OleVariant;
-    ParamValue: TValue;
   begin
     Result := TValue.Empty;
     ParamCount := High(ParamValues) + 1;
     SetLength(params, ParamCount);
     for i := 0 to ParamCount - 1 do
     begin
-      ParamValue := paramValues[i];
-      case ParamValue.Kind of
-        tkInteger, tkChar, tkEnumeration, tkFloat,
-        tkString, tkWChar, tkLString, tkWString,
-        tkVariant, tkInt64, tkUString, tkPointer:
-          Params[i] := ParamValue.AsVariant;
-        tkSet: ;
-        tkClass: ;
-        tkMethod: ;
-        tkArray: ;
-        tkRecord: ;
-        tkInterface:
-          params[i] := TValueToDispatch(ParamValue);
-        tkDynArray: ;
-        tkClassRef: ;
-        tkProcedure: ;
-      end;
+      Params[i] := paramValues[i].AsVariant;
     end;
     wide := FuncName;
     // get dispid of requested method
