@@ -51,7 +51,9 @@ type
   function JSvalToRecordTValue(val: jsval; typ: TRttiType): TValue;
   function JSvalToCallBackRecord(val: jsval; typ: TRttiType): TValue;
   function DefaultTValue(typ: TRttiType): TValue;
-  function JSArrayToTValue(val: IValuesArray): TValue;
+  function JSArrayToTValue(val: IValuesArray): TValue; overload;
+  function JSArrayToTValue(val: IValuesArray;
+    arrType: TRttiDynamicArrayType): TValue; overload;
 
   function JSValIsObject(v: jsval): Boolean;
 //  function JSValIsObjectClass(v: jsval; cl: TClass): Boolean;
@@ -244,14 +246,40 @@ end;
     TValueArr: array of TValue;
     i, count: integer;
   begin
-    count := val.GetCount;
-    SetLength(TValueArr, count);
-    for i := 0 to count - 1 do
+    Result := TValue.Empty;
+    if Assigned(val) then
     begin
-      TValueArr[i] := JsValToTValue(val.GetValue(i));
+      count := val.GetCount;
+      SetLength(TValueArr, count);
+      for i := 0 to count - 1 do
+      begin
+        TValueArr[i] := JsValToTValue(val.GetValue(i));
+      end;
+                               //fix that
+      Result := TValue.FromArray(Result.TypeInfo, TValueArr);
     end;
-                             //fix that
-    Result := TValue.FromArray(Result.TypeInfo, TValueArr);
+  end;
+
+
+  function JSArrayToTValue(val: IValuesArray;
+    arrType: TRttiDynamicArrayType): TValue;
+  var
+    TValueArr: array of TValue;
+    i, count: integer;
+    ElemType: TRttiType;
+  begin
+    Result := TValue.Empty;
+    if Assigned(val) then
+    begin
+      count := val.GetCount;
+      SetLength(TValueArr, count);
+      ElemType := arrType.ElementType;
+      for i := 0 to count - 1 do
+      begin
+        TValueArr[i] := JsValToTValue(val.GetValue(i), ElemType)
+      end;
+      Result := TValue.FromArray(arrType.Handle, TValueArr);
+    end;
   end;
 
   function JsValToVariant(val: jsval): Variant;
@@ -401,8 +429,11 @@ end;
       end;
       tkInterface: ;
       tkInt64: Result := JSValToInt(val);
-      tkDynArray: ;
-
+      tkDynArray:
+        if typ is TRttiDynamicArrayType then
+          Result := JSArrayToTValue(val.AsArray, typ as TRttiDynamicArrayType)
+        else
+          Result := JSArrayToTValue(val.AsArray);
       tkUString:
       begin
         str1 := RawByteString(val.AsString);
