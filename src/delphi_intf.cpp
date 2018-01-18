@@ -22,7 +22,7 @@ namespace Bazis {
 
     BZINTF int BZDECL GetMinorVersion()
     {
-        return 1;
+        return 2;
     }
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
@@ -906,7 +906,8 @@ void IEngine::toStringCallBack(const v8::FunctionCallbackInfo<v8::Value>& args)
 void IEngine::Throw_Exception(const char * error_msg)
 {
 	auto iso = v8::Isolate::GetCurrent();
-	iso->ThrowException(v8::String::NewFromUtf8(iso, error_msg));
+  if (iso)
+	  iso->ThrowException(v8::String::NewFromUtf8(iso, error_msg));
 }
 
 void IEngine::MessageListener(v8::Local<v8::Message> message, v8::Local<v8::Value> error)
@@ -1312,7 +1313,7 @@ void * IMethodArgs::GetDelphiMethod()
 
 void IMethodArgs::SetError(char * errorMsg)
 {
-	error = errorMsg;
+  IEngine::Throw_Exception(errorMsg);
 }
 
 void * IMethodArgs::GetEngine()
@@ -1588,7 +1589,7 @@ void IGetterArgs::SetGetterResult(IBaseValue * val)
 
 void IGetterArgs::SetError(char * errorMsg)
 {
-	error = errorMsg;
+  IEngine::Throw_Exception(errorMsg);
 }
 
 void * IGetterArgs::GetEngine()
@@ -1832,7 +1833,7 @@ void ISetterArgs::SetGetterResult(IBaseValue * val)
 
 void ISetterArgs::SetError(char * errorMsg)
 {
-	error = errorMsg;
+  IEngine::Throw_Exception(errorMsg);
 }
 
 IRecord::IRecord(v8::Isolate * isolate): IBaseValue(isolate)
@@ -2103,7 +2104,7 @@ double IIntfSetterArgs::GetValueAsDouble()
 
 void IIntfSetterArgs::SetError(char * errorMsg)
 {
-	error = errorMsg;
+  IEngine::Throw_Exception(errorMsg);
 }
 
 IBaseValue::IBaseValue(v8::Isolate * isolate, v8::Local<v8::Value> value)

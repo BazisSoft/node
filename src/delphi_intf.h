@@ -436,6 +436,7 @@ public:
 	//callback for delphi's interface method (TODO:: It shouldn't be public)
 	static void InterfaceFuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
 	static IEngine * GetEngine(v8::Isolate * iso);
+  static void Throw_Exception(const char * error_msg);
 
 private:
 	std::vector<char> run_string_result;
@@ -496,10 +497,8 @@ private:
 		const v8::PropertyCallbackInfo<v8::Value>& info);
 
 	static void FuncCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
-    //callBack for toString() js method;
-    static void toStringCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-	static void Throw_Exception(const char * error_msg);
+  //callBack for toString() js method;
+  static void toStringCallBack(const v8::FunctionCallbackInfo<v8::Value>& args);
 	static void MessageListener(v8::Local<v8::Message> message, v8::Local<v8::Value> error);
 };
 
