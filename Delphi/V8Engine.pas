@@ -702,7 +702,7 @@ var
 begin
   Intf := IDispatch(args.GetDelphiObject);
   Eng := TJSEngine(args.GetEngine);
-  if Assigned(Eng) then
+  if Assigned(Eng) and Assigned(Intf) then
     try
       PropName := PUtf8CharToString(args.GetPropName);
       Result := ExecuteOnDispatchMultiParamProp(Intf, PropName, Tvalue.Empty, isProperty);
@@ -902,6 +902,8 @@ var
   begin
     for i := 0 to argsCount - 1 do
     begin
+      if i >= Length(Valueargs) then
+        break;
       Valueargs[i] := JsValToTValue(args.GetArg(i), params[I].ParamType);
     end;
     for i := argsCount to Length(params) - 1 do
