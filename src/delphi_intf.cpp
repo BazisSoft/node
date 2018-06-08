@@ -291,7 +291,7 @@ char * IEngine::RunIncludeCode(char * code)
 {
 	v8::Local<v8::String> source = v8::String::NewFromUtf8(isolate, code, v8::NewStringType::kNormal).ToLocalChecked();
 
-	v8::ScriptOrigin origin(source);
+	v8::ScriptOrigin origin(v8::String::NewFromUtf8(isolate, "include", v8::NewStringType::kNormal).ToLocalChecked());
 	auto context = isolate->GetCurrentContext();
 	v8::Local<v8::Script> script;
 	if (v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
