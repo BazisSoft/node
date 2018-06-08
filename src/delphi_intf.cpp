@@ -22,7 +22,7 @@ namespace Bazis {
 
     BZINTF int BZDECL GetMinorVersion()
     {
-        return 2;
+        return 3;
     }
 
 	BZINTF IEngine *BZDECL InitEngine(void * DEngine)
@@ -293,8 +293,6 @@ char * IEngine::RunIncludeCode(char * code)
 
 	v8::ScriptOrigin origin(source);
 	auto context = isolate->GetCurrentContext();
-	//for debug>>>>>>>>>
-	//<<<<<<<<<for debug
 	v8::Local<v8::Script> script;
 	if (v8::Script::Compile(context, source, &origin).ToLocal(&script)) {
 		script->Run(context);
@@ -562,6 +560,10 @@ IValue * IEngine::NewInterfaceObject(void * value)
     return nullptr;
 }
 
+void IEngine::DetachDebugger()
+{
+  node_engine->DetachDebugger();
+}
 
 void * IEngine::GetDelphiObject(v8::Local<v8::Object> holder)
 {

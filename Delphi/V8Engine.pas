@@ -167,6 +167,7 @@ type
     function RunIncludeFile(FileName: string): string;
     procedure AddIncludeCode(code: UTF8String);
     procedure TryFinishScript;
+    procedure DetachDebugger;
 
     class function GetFullVersion: string;
   end;
@@ -1254,6 +1255,12 @@ begin
   FClassList.Free;
   FIgnoredExceptions.Free;
   FVars.Free;
+end;
+
+procedure TJSEngine.DetachDebugger;
+begin
+  if not Inactive then
+    FEngine.DetachDebugger;
 end;
 
 class function TJSEngine.GetFullVersion: string;

@@ -215,6 +215,7 @@ public:
 	NODE_EXTERN int Start(int argc, char **argv, std::function<void(int)> func, void *eng = nullptr);
 	NODE_EXTERN int RunScript(int argc, char *argv[], std::function<void(int)> func, void *eng = nullptr);
 	NODE_EXTERN void StopScript();
+  void DetachDebugger();
 private:
 	//initialize global object and context (only once) for this engine
 	void InitEngine(void* arg, void* eng);

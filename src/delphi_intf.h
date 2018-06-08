@@ -415,6 +415,7 @@ public:
 	virtual IObject * APIENTRY NewObject(void * value, void * classtype);
     virtual IValue * APIENTRY NewInterfaceObject(void * value);
 
+    virtual void APIENTRY DetachDebugger();
 
 	void * globObject = nullptr;
 	IObjectTemplate * globalTemplate = nullptr;

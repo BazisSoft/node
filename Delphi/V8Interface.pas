@@ -242,6 +242,7 @@ type
     function NewObject(obj: Pointer; dClasstype: Pointer): IObject; virtual; stdcall; abstract;
     function NewInterfaceObject(p: Pointer): IValue; virtual; stdcall; abstract;
 
+    procedure DetachDebugger; virtual; stdcall; abstract;
   end;
 
   function GetMajorVersion: Integer cdecl; external 'node.dll' delayed;

@@ -4708,6 +4708,13 @@ NODE_EXTERN void NodeEngine::StopScript()
 	StopNodeInstance();
 }
 
+void NodeEngine::DetachDebugger()
+{
+  auto env = static_cast<EnvWrapeer *>(env_wrapper_ptr)->GetEnvironment();
+  if (env->debugger_agent())
+    env->debugger_agent()->Stop();
+}
+
 void NodeEngine::InitEngine(void * arg, void * eng)
 {
     using namespace Bv8;
