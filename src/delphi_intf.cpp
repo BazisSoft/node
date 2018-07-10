@@ -1902,44 +1902,53 @@ void IRecord::SetValueField(char * name, IBaseValue * val)
 int IRecord::GetIntField(char * name)
 {
 	auto val = GetField(name);
-	return val->Int32Value(GetCurrentContext()).FromMaybe(0);
+  if (val.IsEmpty())
+    return 0;
+  else
+    return val->Int32Value(GetCurrentContext()).FromMaybe(0);
 }
 
 double IRecord::GetDoubleField(char * name)
 {
 	auto val = GetField(name);
-	return val->NumberValue(GetCurrentContext()).FromMaybe(0.0);
+  if (val.IsEmpty())
+    return 0;
+  else
+      return val->NumberValue(GetCurrentContext()).FromMaybe(0.0);
 }
 
 bool IRecord::GetBoolField(char * name)
 {
-    auto val = GetField(name);
-	return val->BooleanValue(GetCurrentContext()).FromMaybe(false);
+  auto val = GetField(name);
+  if (val.IsEmpty())
+    return false;
+  else
+    return val->BooleanValue(GetCurrentContext()).FromMaybe(false);
 }
 
 char * IRecord::GetStringField(char * name)
 {
-    auto val = GetField(name);
-    run_string_result = std::vector<char>();
-    v8::Isolate::Scope iso_scope(Isolate());
-    auto maybeVal = val->ToString(GetCurrentContext());
-    if (!maybeVal.IsEmpty()) {
-        v8::String::Utf8Value str(maybeVal.ToLocalChecked());
-        char *it1 = *str;
-        char *it2 = *str + str.length();
-        auto vec = std::vector<char>(it1, it2);
-        run_string_result = vec;
-        run_string_result.push_back(0);
-    };
-	return run_string_result.data();
+  auto val = GetField(name);
+  run_string_result = std::vector<char>();
+  v8::Isolate::Scope iso_scope(Isolate());
+  auto maybeVal = val->ToString(GetCurrentContext());
+  if (!maybeVal.IsEmpty()) {
+      v8::String::Utf8Value str(maybeVal.ToLocalChecked());
+      char *it1 = *str;
+      char *it2 = *str + str.length();
+      auto vec = std::vector<char>(it1, it2);
+      run_string_result = vec;
+      run_string_result.push_back(0);
+  };
+  return run_string_result.data();
 }
 
 void * IRecord::GetObjectField(char * name)
 {
-    auto val = GetField(name);
-	if (val->IsExternal())
-		return val.As<v8::External>()->Value();
-	return nullptr;
+  auto val = GetField(name);
+  if (!val.IsEmpty() && val->IsExternal())
+    return val.As<v8::External>()->Value();
+  return nullptr;
 }
 
 v8::Local<v8::Object> IRecord::GetV8Object()
