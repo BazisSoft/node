@@ -2033,6 +2033,11 @@ IValue * IFunction::CallFunction()
 		return nullptr;
 }
 
+IEngine * IFunction::GetEngine()
+{
+  return IEngine::GetEngine(iso);
+}
+
 IIntfSetterArgs::IIntfSetterArgs(const v8::PropertyCallbackInfo<v8::Value>& info, char * prop, v8::Local<v8::Value> newValue)
 {
 	propName = prop;
@@ -2183,6 +2188,11 @@ IRecord * IBaseValue::AsRecord()
 IValue * IBaseValue::AsValue()
 {
     return dynamic_cast<IValue *>(this);
+}
+
+IEngine * IBaseValue::GetEngine()
+{
+  return IEngine::GetEngine(Isolate());
 }
 
 }

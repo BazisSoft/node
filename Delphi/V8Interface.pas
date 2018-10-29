@@ -8,6 +8,7 @@ type
   IValuesArray = class;
   IRecord = class;
   IValue = class;
+  IEngine = class;
 
   IEngineIntf = class
     // do not call!
@@ -27,6 +28,7 @@ type
     function AsJSArray: IValuesArray; virtual; stdcall; abstract;
     function AsJSRecord: IRecord; virtual; stdcall; abstract;
     function AsJSValue: IValue; virtual; stdcall; abstract;
+    function GetEngine: IEngine; virtual; stdcall; abstract;
   end;
 
   IObject = class (IBaseValue)
@@ -42,6 +44,7 @@ type
     procedure AddArg(val: double); overload; virtual; stdcall; abstract;
     procedure AddArg(val: Pointer; cType: Pointer); overload; virtual; stdcall; abstract;
     function CallFunction: IValue; virtual; stdcall; abstract;
+    function GetEngine: IEngine; virtual; stdcall; abstract;
   end;
 
   IValuesArray = class (IBaseValue)

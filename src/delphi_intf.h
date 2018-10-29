@@ -24,6 +24,7 @@ class IObject;
 class IValueArray;
 class IRecord;
 class IValue;
+class IEngine;
 
 class IBazisIntf {
 public:
@@ -48,6 +49,7 @@ public:
     virtual IValueArray * APIENTRY AsArray();
     virtual IRecord * APIENTRY AsRecord();
     virtual IValue * APIENTRY AsValue();
+    virtual IEngine * APIENTRY GetEngine();
 private:
     v8::Persistent<v8::Value> v8Value;
     v8::Isolate * iso;
@@ -72,6 +74,7 @@ public:
 	virtual void APIENTRY AddArgAsNumber(double val);
 	virtual void APIENTRY AddArgAsObject(void * value, void * classtype);
 	virtual IValue * APIENTRY CallFunction();
+  virtual IEngine * APIENTRY GetEngine();
 private:
 	v8::Isolate * iso = nullptr;
 	std::vector<v8::Local<v8::Value>> argv;

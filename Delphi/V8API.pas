@@ -97,6 +97,8 @@ var
   Func: IFunction;
   Obj: TObject;
   Param: TValue;
+  ObjclassType: TClass;
+  Eng: IEngine;
 begin
   Func := Value.AsFunction;
   Result := False;
@@ -117,7 +119,17 @@ begin
       tkClass:
       begin
         Obj := Params[k].AsObject;
-        Func.AddArg(Obj, obj.ClassType);
+        Eng := Func.GetEngine;
+        if Assigned(Obj) then
+        begin
+          objClasstype := Obj.ClassType;
+          if Assigned(Eng) then
+          begin
+            while (not Eng.ClassIsRegistered(objClasstype)) and (objClasstype <> TObject) do
+              objClasstype := objClasstype.ClassParent;
+          end;
+          Func.AddArg(Obj, ObjclassType);
+        end;
       end;
       tkWChar, tkChar, tkString, tkLString, tkWString, tkUString:
         Func.AddArg(PAnsiChar(UTF8String(Params[k].AsString)));
