@@ -53,7 +53,7 @@ type
   function DefaultTValue(typ: TRttiType): TValue;
   function JSArrayToTValue(val: IValuesArray): TValue; overload;
   function JSArrayToTValue(val: IValuesArray;
-    arrType: TRttiDynamicArrayType): TValue; overload;
+    arrType: TRttiType): TValue; overload;
 
   function JSValIsObject(v: jsval): Boolean;
 //  function JSValIsObjectClass(v: jsval; cl: TClass): Boolean;
@@ -262,21 +262,35 @@ end;
 
 
   function JSArrayToTValue(val: IValuesArray;
-    arrType: TRttiDynamicArrayType): TValue;
+    arrType: TRttiType): TValue;
   var
     TValueArr: array of TValue;
-    i, count: integer;
+    i, count, jsCount: integer;
     ElemType: TRttiType;
   begin
     Result := TValue.Empty;
     if Assigned(val) then
     begin
-      count := val.GetCount;
+      jsCount := val.GetCount;
+      if arrType is TRttiArrayType then
+      begin
+        ElemType := TRttiArrayType(arrType).ElementType;
+        count := TRttiArrayType(arrType).TotalElementCount;
+      end
+      else if arrType is TRttiDynamicArrayType then
+      begin
+        ElemType := TRttiDynamicArrayType(arrType).ElementType;
+        count := jsCount;
+      end
+      else
+        Exit;
       SetLength(TValueArr, count);
-      ElemType := arrType.ElementType;
       for i := 0 to count - 1 do
       begin
-        TValueArr[i] := JsValToTValue(val.GetValue(i), ElemType)
+        if i < jsCount then
+          TValueArr[i] := JSValToTValue(val.GetValue(i), ElemType)
+        else
+          TValueArr[i] := DefaultTValue(ElemType);
       end;
       Result := TValue.FromArray(arrType.Handle, TValueArr);
     end;
@@ -419,7 +433,7 @@ end;
       tkLString: Result := (UTF8ToUnicodeString(RawByteString(val.AsString)));
       tkWString: Result := UTF8ToUnicodeString(RawByteString(val.AsString));
       tkVariant: Result := TValue.From<Variant>(JsValToVariant(val));
-      tkArray: ;
+      tkArray: Result := JSArrayToTValue(val.AsArray, typ);
       tkRecord:
       begin
         if TypeHasAttribute(typ, TCallBackAttr) then
@@ -525,13 +539,35 @@ end;
     function MakeInterface: IBaseValue;
     var
       ResDispatch: IDispatch;
+      obj: TObject;
+      objClasstype: TClass;
+      Intf: IInterface;
     begin
       Result := nil;
       if Assigned(IntfList) then
       begin
         ResDispatch := TValueToDispatch(val);
-        IntfList.Add(ResDispatch);
-        Result := Eng.NewInterfaceObject(Pointer(ResDispatch));
+        if Assigned(ResDispatch) then
+        begin
+          IntfList.Add(ResDispatch);
+          Result := Eng.NewInterfaceObject(Pointer(ResDispatch));
+        end
+        else
+        begin
+          Intf := val.AsInterface;
+          obj := TObject(Intf);
+          if Assigned(obj) then
+          begin
+            objClasstype := obj.ClassType;
+            if Assigned(Eng) then
+            begin
+              while (not Eng.ClassIsRegistered(objClasstype)) and (objClasstype <> TObject) do
+                objClasstype := objClasstype.ClassParent;
+            end;
+            if (objClasstype <> TObject) then
+              Result := Eng.NewObject(obj, objClasstype);
+          end;
+        end;
       end;
     end;
 
