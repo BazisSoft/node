@@ -1407,8 +1407,12 @@ IBaseValue * IValueArray::GetValue(int index)
 
 void IValueArray::SetValue(IBaseValue * value, int index)
 {
-	auto v8_array = GetV8Array();
-	v8_array->Set(GetCurrentContext(), index, value->GetV8Value());
+  auto v8_array = GetV8Array();
+  if (value) {
+    v8_array->Set(GetCurrentContext(), index, value->GetV8Value());
+  }
+  else
+    v8_array->Set(GetCurrentContext(), index, v8::Undefined(Isolate()));
 }
 
 std::vector<v8::Local<v8::Value>> IValueArray::GeV8ValueVector()
